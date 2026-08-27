@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Philippine Airbnb Scanner — Explorer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-soft: #0f141c;
+    --card: #131a24;
+    --card-hover: #18212d;
+    --border: #232e3c;
+    --border-soft: #1b2531;
+    --text: #e6edf3;
+    --muted: #8a99a8;
+    --muted-2: #5c6b7a;
+    --accent: #10b981;
+    --accent-2: #0d9668;
+    --gold: #f5c451;
+    --violet: #8b5cf6;
+    --danger: #ef4444;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(16,185,129,.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 0%, rgba(139,92,246,.07), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px;
+    background: rgba(10,14,20,.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  header .logo {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, #10b981, #0d9488);
+    display: grid; place-items: center; font-size: 18px; box-shadow: 0 4px 14px rgba(16,185,129,.35);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; letter-spacing: .01em; }
+  header .count {
+    color: var(--muted); font-size: 12.5px;
+    background: var(--bg-soft); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 999px;
+  }
+  .toolbar {
+    padding: 14px 22px 6px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  /* Shared form-field style (toolbar + filters) */
+  input[type=text], input[type=number], select {
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+    font-size: 13px; background: var(--bg-soft); color: var(--text);
+    outline: none; transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  input[type=text]:hover, input[type=number]:hover, select:hover { border-color: #33445a; }
+  input[type=text]:focus, input[type=number]:focus, select:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,.15);
+  }
+  input::placeholder { color: var(--muted-2); }
+  select {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    padding-right: 34px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%238a99a8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  select option { background: var(--card); color: var(--text); }
+  .toolbar .search { flex: 1 1 220px; min-width: 180px; }
+  input[type=number] { -moz-appearance: textfield; }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  details.filters {
+    margin: 8px 22px 6px; background: var(--bg-soft);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  details.filters summary { cursor: pointer; padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--muted); list-style: none; }
+  details.filters summary::-webkit-details-marker { display: none; }
+  details.filters summary:hover { color: var(--text); }
+  details.filters .inner { padding: 2px 14px 14px; display: flex; flex-wrap: wrap; gap: 16px; }
+  details.filters .grp { min-width: 160px; }
+  details.filters .grp h4 { font-size: 10.5px; text-transform: uppercase; color: var(--muted-2); margin: 10px 0 6px; letter-spacing: .06em; font-weight: 600; }
+  .chk-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chk {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 8px;
+    border: 1px solid var(--border); border-radius: 20px; background: var(--card);
+    font-size: 12px; cursor: pointer; user-select: none; color: var(--muted);
+    transition: all .15s;
+  }
+  .chk .box {
+    width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
+    border: 1.5px solid var(--muted-2); background: var(--bg-soft);
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .chk .box::after {
+    content: "✓"; color: #04231a; font-size: 10px; font-weight: 800; line-height: 1;
+    opacity: 0; transform: scale(.4); transition: all .12s;
+  }
+  .chk:hover { border-color: var(--accent); color: var(--text); }
+  .chk input { display: none; }
+  .chk input:checked ~ .box { background: var(--accent); border-color: var(--accent); }
+  .chk input:checked ~ .box::after { opacity: 1; transform: scale(1); }
+  .chk.on { background: rgba(16,185,129,.14); color: #34d399; border-color: var(--accent); }
+  .region-host { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+  details.region {
+    background: var(--card); border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 2px 10px 8px; align-self: start;
+  }
+  details.region summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; color: var(--muted); padding: 7px 0;
+  }
+  details.region summary::-webkit-details-marker { display: none; }
+  details.region summary::before { content: "▸"; transition: transform .15s; color: var(--accent); }
+  details.region[open] summary::before { transform: rotate(90deg); }
+  details.region summary:hover { color: var(--text); }
+  details.region .rcount {
+    margin-left: auto; font-size: 10px; color: var(--muted-2);
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px;
+  }
+  details.region .rall {
+    font-size: 10.5px; color: var(--accent); cursor: pointer; background: none; border: none;
+    padding: 0 2px; font-weight: 600;
+  }
+  details.region .rall:hover { text-decoration: underline; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .chip .box {
+    width: 15px; height: 15px; border-radius: 4px; flex-shrink: 0;
+    border: 1.5px solid var(--muted-2); background: var(--bg-soft);
+    display: inline-flex; align-items: center; justify-content: center; transition: all .15s;
+  }
+  .chip .box::after {
+    content: "✓"; color: #04231a; font-size: 10px; font-weight: 800; line-height: 1;
+    opacity: 0; transform: scale(.4); transition: all .12s;
+  }
+  .chip:hover { color: var(--text); }
+  .chip input { display: none; }
+  .chip input:checked ~ .box { background: var(--accent); border-color: var(--accent); }
+  .chip input:checked ~ .box::after { opacity: 1; transform: scale(1); }
+  .chip input:checked ~ span { color: #34d399; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 18px; padding: 8px 22px 20px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border-soft); border-radius: var(--radius);
+    overflow: hidden; display: flex; flex-direction: column;
+    transition: transform .18s, border-color .18s, box-shadow .18s;
+  }
+  .card:hover {
+    transform: translateY(-4px); border-color: #2f3c4c;
+    box-shadow: 0 14px 40px rgba(0,0,0,.5);
+  }
+  .thumb { position: relative; aspect-ratio: 16/10; background: #0d1219; overflow: hidden; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s; }
+  .card:hover .thumb img { transform: scale(1.05); }
+  .thumb .ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #38434f; font-size: 12px; }
+  .thumb .shade {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(to top, rgba(10,14,20,.92) 0%, rgba(10,14,20,.15) 45%, transparent 65%);
+  }
+  .badge {
+    position: absolute; top: 10px; left: 10px;
+    font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 7px;
+    backdrop-filter: blur(4px); letter-spacing: .02em;
+  }
+  .badge.type { background: rgba(16,185,129,.9); color: #04231a; }
+  .badge.featured { background: rgba(245,196,81,.95); color: #3a2b06; }
+  .badge.gps { background: rgba(139,92,246,.9); color: #140826; }
+  .thumb .price {
+    position: absolute; left: 12px; bottom: 10px;
+    font-size: 20px; font-weight: 700; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6);
+  }
+  .thumb .price small { font-weight: 500; color: #b9c5cf; font-size: 11px; }
+  .price-chg {
+    display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px;
+    border-radius: 7px; margin-left: 6px; vertical-align: 2px;
+  }
+  .price-chg.down { background: rgba(239,68,68,.25); color: #fca5a5; }
+  .price-chg.up { background: rgba(34,197,94,.22); color: #86efac; }
+  .prev-price { font-size: 11px; color: var(--muted-2); }
+  .card .body { padding: 13px 15px 15px; display: flex; flex-direction: column; gap: 9px; flex: 1; }
+  .title { font-size: 13.5px; line-height: 1.4; font-weight: 500;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .loc { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .specs { display: flex; gap: 14px; font-size: 12.5px; color: #c3cdd7; flex-wrap: wrap; }
+  .specs span b { font-weight: 700; color: #fff; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { background: #1c2632; color: #a5b2be; font-size: 11px; padding: 3px 8px; border-radius: 6px; }
+  .tag.zone { background: rgba(16,185,129,.14); color: #34d399; }
+  .meta { font-size: 11px; color: var(--muted-2); display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; }
+  .meta .agent { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+  a.link {
+    margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    text-decoration: none; background: linear-gradient(135deg, #10b981, #0d9488);
+    color: #04231a; font-size: 13px; font-weight: 700; padding: 9px; border-radius: 10px;
+    transition: filter .15s, transform .15s;
+  }
+  a.link:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+  .pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 20px 32px; }
+  .pager button {
+    padding: 9px 16px; border: 1px solid var(--border); background: var(--card);
+    color: var(--text); border-radius: 10px; cursor: pointer; font-size: 13px;
+    transition: border-color .15s, background .15s;
+  }
+  .pager button:hover:not(:disabled) { border-color: var(--accent); }
+  .pager button:disabled { opacity: .35; cursor: default; }
+  .pager .info { font-size: 13px; color: var(--muted); }
+  .empty { grid-column: 1/-1; text-align: center; color: var(--muted); padding: 70px 0; font-size: 15px; }
+  .spin { grid-column: 1/-1; text-align: center; padding: 50px; color: var(--muted); }
+
+  /* --- Map (right half of filters) --- */
+  .filters-col {
+    flex: 1 1 380px; min-width: 300px;
+    display: flex; flex-wrap: wrap; gap: 16px; align-content: flex-start;
+  }
+  .map-section {
+    flex: 1 1 400px; min-width: 320px; min-height: 460px;
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+    background: var(--bg-soft);
+  }
+  .map-controls {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px; background: var(--bg-soft); border-bottom: 1px solid var(--border);
+    font-size: 12.5px; color: var(--muted);
+  }
+  .map-controls .map-title { font-weight: 600; color: var(--text); }
+  .map-controls input[type=range] { flex: 1 1 180px; accent-color: var(--accent); }
+  .map-controls .radval { color: #34d399; font-weight: 700; }
+  .map-controls button {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12.5px;
+    transition: border-color .15s;
+  }
+  .map-controls button:hover { border-color: var(--accent); }
+  #map { flex: 1; min-height: 320px; background: #0d1219; }
+  .leaflet-container { background: #0d1219; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #141a22; color: var(--text); }
+  .leaflet-popup-content a { color: #34d399; }
+  .map-tip { font-size: 12px; line-height: 1.4; }
+  .map-tip b { display: block; font-size: 12.5px; }
+
+  /* --- Manual add (Facebook / rush sale) --- */
+  .header-btn {
+    background: linear-gradient(135deg, #10b981, #0d9488); color: #04231a;
+    border: none; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+    font-size: 13px; font-weight: 700; transition: filter .15s;
+  }
+  .header-btn:hover { filter: brightness(1.1); }
+  textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+    font-size: 13px; background: var(--bg-soft); color: var(--text); resize: vertical;
+    outline: none; font-family: inherit; transition: border-color .15s, box-shadow .15s;
+  }
+  textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.65);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+  .modal {
+    width: 100%; max-width: 470px; max-height: 90vh; overflow: auto;
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .modal-head h3 { margin: 0; font-size: 15px; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .modal-body .row { display: flex; gap: 10px; }
+  .modal-body .row > * { flex: 1; min-width: 0; }
+
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: #24303f; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🇵🇭</div>
+  <h1>Philippine Airbnb Scanner</h1>
+  <span class="count" id="count">chargement…</span>
+  <span style="flex:1"></span>
+  <button class="header-btn" id="add-btn">＋ Ajouter</button>
+</header>
+
+<div class="toolbar">
+  <input type="text" class="search" id="q" placeholder="Rechercher (titre, lieu, description, agent)…">
+  <select id="sort">
+    <option value="newest">Plus récent</option>
+    <option value="price_asc">Prix croissant</option>
+    <option value="price_desc">Prix décroissant</option>
+    <option value="psqm_asc">Prix/m² croissant</option>
+    <option value="psqm_desc">Prix/m² décroissant</option>
+    <option value="drop_desc">Baisse de prix</option>
+    <option value="rise_desc">Hausse de prix</option>
+    <option value="area_desc">Surface décroissante</option>
+    <option value="beds_desc">Chambres décroissant</option>
+  </select>
+  <select id="per_page">
+    <option value="24">24 / page</option>
+    <option value="48">48 / page</option>
+    <option value="96">96 / page</option>
+  </select>
+</div>
+
+<details class="filters" id="filters">
+  <summary>⚙️ Filtres & Carte</summary>
+  <div class="inner">
+    <div class="filters-col">
+      <div class="grp" style="flex:1 1 320px; min-width:300px;">
+        <h4>Province (par région)</h4>
+        <div class="region-host" id="province-regions"></div>
+      </div>
+      <div class="grp">
+        <h4>Type de bien</h4>
+        <div class="chk-group" id="type-chk"></div>
+      </div>
+      <div class="grp">
+        <h4>Zone cible</h4>
+        <div class="chk-group" id="zone-chk"></div>
+      </div>
+      <div class="grp">
+        <h4>Prix (₱)</h4>
+        <div style="display:flex; gap:6px;">
+          <input type="number" id="min_price" placeholder="min" style="width:92px">
+          <input type="number" id="max_price" placeholder="max" style="width:92px">
+        </div>
+        <h4>Surface (m²)</h4>
+        <div style="display:flex; gap:6px;">
+          <input type="number" id="min_area" placeholder="min" style="width:92px">
+          <input type="number" id="max_area" placeholder="max" style="width:92px">
+        </div>
+      </div>
+      <div class="grp">
+        <h4>Chambres min</h4>
+        <input type="number" id="min_beds" placeholder="ex. 2" style="width:92px">
+        <h4 style="margin-top:14px;">Options</h4>
+        <label class="chip"><input type="checkbox" id="has_gps"><span class="box"></span><span>avec GPS</span></label>
+        <label class="chip" style="margin-top:6px;"><input type="checkbox" id="price_drop"><span class="box"></span><span>baisse de prix</span></label>
+      </div>
+    </div>
+
+    <div class="map-section">
+      <div class="map-controls">
+        <span class="map-title">🗺️ Carte</span>
+        <span>Rayon : <span class="radval" id="radius-label">30 km</span></span>
+        <input type="range" id="radius" min="1" max="300" value="30">
+        <button id="map-clear">Effacer</button>
+        <span id="map-count" style="color:#34d399"></span>
+        <span id="map-hint" style="font-size:11px;">📍 Cliquez sur la carte, puis ajustez le rayon</span>
+      </div>
+      <div id="map"></div>
+    </div>
+  </div>
+</details>
+
+<div class="grid" id="grid"></div>
+<div class="pager" id="pager"></div>
+
+<div class="modal-overlay" id="add-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Ajouter une annonce (Facebook / manuel)</h3>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="m-title" placeholder="Titre *">
+      <div class="row">
+        <input type="number" id="m-price" placeholder="Prix (₱) *">
+        <select id="m-type">
+          <option value="house">House</option>
+          <option value="condo">Condo</option>
+          <option value="land">Land</option>
+          <option value="villa">Villa</option>
+          <option value="commercial">Commercial</option>
+          <option value="apartment">Apartment</option>
+          <option value="other">Autre</option>
+        </select>
+      </div>
+      <input type="text" id="m-location" placeholder="Localisation * (ex. Nasugbu, Batangas)">
+      <div class="row">
+        <input type="number" id="m-beds" placeholder="Chambres">
+        <input type="number" id="m-baths" placeholder="SDB">
+        <input type="number" id="m-area" placeholder="Surface m²">
+      </div>
+      <input type="text" id="m-url" placeholder="URL (lien Facebook, optionnel)">
+      <textarea id="m-desc" placeholder="Description (optionnel)" rows="3"></textarea>
+      <input type="text" id="m-agent" placeholder="Agent / contact (optionnel)">
+      <button class="link" id="m-submit" style="width:100%; margin-top:4px;">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const RATE_PHP_EUR = 63;
+
+const state = { page: 1, per_page: 24 };
+const mapState = { lat: null, lng: null, radius: 30 };
+let facets = null;
+let map = null, mapMarker = null, mapCircle = null, mapMarkersLayer = null;
+let regionColors = {};
+
+function fmtPHP(n) { return n == null ? "—" : "₱" + n.toLocaleString("en-PH"); }
+function fmtEUR(n) { return n == null ? "" : "≈ €" + Math.round(n / RATE_PHP_EUR).toLocaleString("fr-FR"); }
+function esc(s) {
+  return (s == null ? "" : String(s)).replace(/[&<>"']/g,
+    c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function loadFacets() {
+  fetch("/api/facets").then(r => r.json()).then(f => {
+    facets = f;
+    buildProvinceFilter(f.regions);
+    buildChips("#type-chk", "property_type", f.types);
+    buildChips("#zone-chk", "zone_id", f.zones);
+    document.getElementById("min_price").placeholder = "min " + Math.floor(f.price_min/1e6) + "M";
+    document.getElementById("max_price").placeholder = "max " + Math.round(f.price_max/1e6) + "M";
+  });
+}
+
+function makeChip(key, value) {
+  const lbl = document.createElement("label");
+  lbl.className = "chk";
+  lbl.dataset.key = key;
+  lbl.dataset.value = value;
+  lbl.innerHTML = '<input type="checkbox" value="' + esc(value) + '"><span class="box"></span>' + esc(value);
+  lbl.querySelector("input").addEventListener("change", () => {
+    lbl.classList.toggle("on", lbl.querySelector("input").checked);
+    state.page = 1; refresh();
+  });
+  return lbl;
+}
+
+function buildChips(sel, key, values) {
+  const host = document.querySelector(sel);
+  host.innerHTML = "";
+  (values || []).forEach(v => host.appendChild(makeChip(key, v)));
+}
+
+function buildProvinceFilter(regions) {
+  const host = document.querySelector("#province-regions");
+  host.innerHTML = "";
+  (regions || []).forEach(reg => {
+    const det = document.createElement("details");
+    det.className = "region";
+    const sum = document.createElement("summary");
+    const name = document.createElement("span");
+    name.textContent = reg.name;
+    const cnt = document.createElement("span");
+    cnt.className = "rcount";
+    cnt.textContent = reg.provinces.length;
+    const rall = document.createElement("button");
+    rall.className = "rall";
+    rall.textContent = "tout";
+    rall.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const inputs = det.querySelectorAll(".chk input");
+      const shouldCheck = Array.from(inputs).some(cb => !cb.checked);
+      inputs.forEach(cb => {
+        cb.checked = shouldCheck;
+        cb.closest(".chk").classList.toggle("on", shouldCheck);
+      });
+      state.page = 1; refresh();
+    });
+    sum.appendChild(name);
+    sum.appendChild(cnt);
+    sum.appendChild(rall);
+    det.appendChild(sum);
+    const group = document.createElement("div");
+    group.className = "chk-group";
+    reg.provinces.forEach(p => group.appendChild(makeChip("province", p)));
+    det.appendChild(group);
+    host.appendChild(det);
+  });
+}
+
+function activeFilters() {
+  const p = new URLSearchParams();
+  const q = document.getElementById("q").value.trim();
+  if (q) p.set("q", q);
+
+  document.querySelectorAll(".chk").forEach(lbl => {
+    const cb = lbl.querySelector("input");
+    if (cb.checked) {
+      const key = lbl.dataset.key, val = lbl.dataset.value;
+      p.set(key, (p.get(key) ? p.get(key) + "," : "") + val);
+    }
+  });
+
+  const num = (id) => document.getElementById(id).value;
+  if (num("min_price")) p.set("min_price", num("min_price"));
+  if (num("max_price")) p.set("max_price", num("max_price"));
+  if (num("min_area")) p.set("min_area", num("min_area"));
+  if (num("max_area")) p.set("max_area", num("max_area"));
+  if (num("min_beds")) p.set("min_beds", num("min_beds"));
+  if (document.getElementById("has_gps").checked) p.set("has_gps", "1");
+  if (document.getElementById("price_drop").checked) p.set("price_drop", "1");
+
+  if (mapState.lat != null && mapState.lng != null) {
+    p.set("lat", mapState.lat);
+    p.set("lng", mapState.lng);
+    p.set("radius", mapState.radius);
+  }
+
+  p.set("sort", document.getElementById("sort").value);
+  p.set("page", state.page);
+  p.set("per_page", state.per_page);
+  return p;
+}
+
+function cardHTML(it) {
+  const thumb = it.thumb;
+  const imgTag = thumb
+    ? '<img loading="lazy" src="' + esc(thumb) + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+      + '<div class="ph" style="display:none">📷</div>'
+    : '<div class="ph" style="display:flex">📷</div>';
+
+  const badges = [];
+  badges.push('<span class="badge type">' + esc(it.property_type || "bien") + '</span>');
+  if (it.is_featured) badges.push('<span class="badge featured" style="left:auto;right:10px">★ Featured</span>');
+  if (it.latitude) badges.push('<span class="badge gps" style="left:auto;right:10px;top:' + (it.is_featured ? 40 : 10) + 'px">📍</span>');
+
+  const specs = [];
+  if (it.beds != null) specs.push('<span><b>' + it.beds + '</b> ch.</span>');
+  if (it.baths != null) specs.push('<span><b>' + it.baths + '</b> sdb</span>');
+  if (it.area_sqm != null) specs.push('<span><b>' + Math.round(it.area_sqm).toLocaleString("fr-FR") + '</b> m²</span>');
+  if (it.price_per_sqm != null) specs.push('<span style="color:var(--muted)">' + Math.round(it.price_per_sqm).toLocaleString("fr-FR") + ' ₱/m²</span>');
+
+  const tags = (it.amenities || []).slice(0, 4).map(a => '<span class="tag">' + esc(a) + '</span>').join("");
+  const zone = it.zone_id ? '<span class="tag zone">' + esc(it.zone_id) + '</span>' : '';
+
+  let changePill = "";
+  let prevPrice = "";
+  if (it.price_change_pct != null) {
+    const down = it.price_change_pct < 0;
+    changePill = '<span class="price-chg ' + (down ? "down" : "up") + '">'
+      + (down ? "▼ " : "▲ ") + Math.abs(it.price_change_pct) + '%</span>';
+    prevPrice = '<div class="prev-price">Ancien prix : ' + fmtPHP(it.price_prev) + '</div>';
+  }
+
+  return '<div class="card">' +
+    '<div class="thumb">' + badges.join("") + imgTag +
+      '<div class="shade"></div>' +
+      '<div class="price">' + fmtPHP(it.price_php) + ' <small>' + fmtEUR(it.price_php) + '</small>' + changePill + '</div>' +
+    '</div>' +
+    '<div class="body">' +
+      '<div class="title">' + esc(it.title) + '</div>' +
+      '<div class="loc">📍 ' + esc(it.location_text || it.province || "") + '</div>' +
+      '<div class="specs">' + specs.join("") + '</div>' +
+      prevPrice +
+      '<div class="tags">' + zone + tags + '</div>' +
+      '<div class="meta"><span>' + esc(it.property_type || "") + '</span><span class="agent">' + esc(it.agent || "") + '</span></div>' +
+      '<a class="link" href="' + esc(it.url) + '" target="_blank" rel="noopener">Voir l’annonce ↗</a>' +
+    '</div>' +
+  '</div>';
+}
+
+function refresh() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = '<div class="spin">Chargement…</div>';
+  fetch("/api/listings?" + activeFilters().toString())
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById("count").textContent =
+        data.total.toLocaleString("fr-FR") + " annonces";
+      if (!data.items.length) {
+        grid.innerHTML = '<div class="empty">Aucune annonce ne correspond aux filtres.</div>';
+      } else {
+        grid.innerHTML = data.items.map(cardHTML).join("");
+      }
+      renderPager(data);
+      if (mapMarkersLayer) refreshMapMarkers();
+    })
+    .catch(e => { grid.innerHTML = '<div class="empty">Erreur : ' + esc(e.message) + '</div>'; });
+}
+
+function renderPager(data) {
+  const pager = document.getElementById("pager");
+  pager.innerHTML =
+    '<button ' + (data.page <= 1 ? "disabled" : "") + ' data-p="' + (data.page - 1) + '">‹ Précédent</button>' +
+    '<span class="info">Page ' + data.page + ' / ' + data.pages + '</span>' +
+    '<button ' + (data.page >= data.pages ? "disabled" : "") + ' data-p="' + (data.page + 1) + '">Suivant ›</button>';
+  pager.querySelectorAll("button[data-p]").forEach(b =>
+    b.addEventListener("click", () => { state.page = +b.dataset.p; refresh(); window.scrollTo(0, 0); })
+  );
+}
+
+let debounce = null;
+document.getElementById("q").addEventListener("input", () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(() => { state.page = 1; refresh(); }, 300);
+});
+document.getElementById("sort").addEventListener("change", () => { state.page = 1; refresh(); });
+document.getElementById("per_page").addEventListener("change", e => {
+  state.per_page = +e.target.value; state.page = 1; refresh();
+});
+["min_price","max_price","min_area","max_area","min_beds"].forEach(id =>
+  document.getElementById(id).addEventListener("change", () => { state.page = 1; refresh(); })
+);
+document.getElementById("has_gps").addEventListener("change", () => { state.page = 1; refresh(); });
+document.getElementById("price_drop").addEventListener("change", () => { state.page = 1; refresh(); });
+
+/* --- Map --- */
+const PH_CENTER = [12.88, 121.77];
+
+function initMap() {
+  if (map) return;
+  map = L.map("map", { zoomControl: true }).setView(PH_CENTER, 6);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap", maxZoom: 19
+  }).addTo(map);
+  mapMarkersLayer = L.layerGroup().addTo(map);
+  map.on("click", e => setMapPoint(e.latlng.lat, e.latlng.lng));
+
+  fetch("/static/ph_regions.geojson")
+    .then(r => r.json())
+    .then(geo => {
+      L.geoJSON(geo, {
+        style: f => ({ color: regionColor(f.properties.region_name), weight: 1, fillColor: regionColor(f.properties.region_name), fillOpacity: 0.12 }),
+        onEachFeature: (f, layer) => {
+          const p = f.properties;
+          layer.bindTooltip((p.adm2_en || "") + " — " + p.region_name, { sticky: true, direction: "top" });
+          layer.on("mouseover", e => e.target.setStyle({ fillOpacity: 0.35, weight: 2 }));
+          layer.on("mouseout", () => layer.setStyle({ fillOpacity: 0.12, weight: 1 }));
+        }
+      }).addTo(map);
+    });
+}
+
+function regionColor(name) {
+  if (regionColors[name]) return regionColors[name];
+  const palette = ["#10b981","#8b5cf6","#f59e0b","#3b82f6","#ef4444","#14b8a6","#ec4899",
+                   "#f97316","#06b6d4","#a3e635","#eab308","#22c55e","#6366f1","#f43f5e",
+                   "#0ea5e9","#84cc16","#d946ef"];
+  const n = Object.keys(regionColors).length;
+  regionColors[name] = palette[n % palette.length];
+  return regionColors[name];
+}
+
+function setMapPoint(lat, lng) {
+  mapState.lat = lat;
+  mapState.lng = lng;
+  if (mapMarker) map.removeLayer(mapMarker);
+  if (mapCircle) map.removeLayer(mapCircle);
+  mapMarker = L.marker([lat, lng]).addTo(map);
+  mapCircle = L.circle([lat, lng], {
+    radius: mapState.radius * 1000, color: "#34d399",
+    fillColor: "#10b981", fillOpacity: 0.08, weight: 1
+  }).addTo(map);
+  state.page = 1;
+  refresh();
+}
+
+function clearMapPoint() {
+  mapState.lat = null;
+  mapState.lng = null;
+  if (mapMarker) map.removeLayer(mapMarker);
+  if (mapCircle) map.removeLayer(mapCircle);
+  mapMarker = mapCircle = null;
+  if (mapMarkersLayer) mapMarkersLayer.clearLayers();
+  document.getElementById("map-count").textContent = "";
+  state.page = 1;
+  refresh();
+}
+
+function refreshMapMarkers() {
+  if (!map || !mapMarkersLayer) return;
+  mapMarkersLayer.clearLayers();
+  if (mapState.lat == null) return;
+  const p = activeFilters();
+  p.set("per_page", 200);
+  fetch("/api/listings?" + p.toString())
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById("map-count").textContent =
+        data.total.toLocaleString("fr-FR") + " offres";
+      data.items.forEach(it => {
+        if (it.latitude == null || it.longitude == null) return;
+        const m = L.circleMarker([it.latitude, it.longitude], {
+          radius: 6, color: "#0a0e14", weight: 1, fillColor: "#34d399", fillOpacity: 0.9
+        });
+        m.bindPopup('<div class="map-tip"><b>' + esc(it.title) + "</b>" +
+          fmtPHP(it.price_php) + " · " + esc(it.location_text || "") +
+          '<br><a href="' + esc(it.url) + '" target="_blank">Voir l’annonce ↗</a></div>');
+        mapMarkersLayer.addLayer(m);
+      });
+    });
+}
+
+document.getElementById("filters").addEventListener("toggle", () => {
+  if (!document.getElementById("filters").open) return;
+  initMap();
+  setTimeout(() => { if (map) map.invalidateSize(); }, 80);
+});
+
+document.getElementById("radius").addEventListener("input", e => {
+  mapState.radius = +e.target.value;
+  document.getElementById("radius-label").textContent = mapState.radius + " km";
+  if (mapCircle) mapCircle.setRadius(mapState.radius * 1000);
+  if (mapState.lat != null) { state.page = 1; refresh(); }
+});
+
+document.getElementById("map-clear").addEventListener("click", clearMapPoint);
+
+/* --- Manual add (Facebook / rush sale) --- */
+const M_FIELDS = ["m-title","m-price","m-location","m-beds","m-baths","m-area","m-url","m-desc","m-agent"];
+
+function openModal() { document.getElementById("add-modal").style.display = "flex"; document.getElementById("m-title").focus(); }
+function closeModal() { document.getElementById("add-modal").style.display = "none"; }
+function clearForm() { M_FIELDS.forEach(id => document.getElementById(id).value = ""); }
+
+document.getElementById("add-btn").addEventListener("click", openModal);
+document.getElementById("modal-close").addEventListener("click", closeModal);
+document.getElementById("add-modal").addEventListener("click", e => {
+  if (e.target === document.getElementById("add-modal")) closeModal();
+});
+document.getElementById("m-submit").addEventListener("click", () => {
+  const v = id => document.getElementById(id).value;
+  const payload = {
+    title: v("m-title"),
+    price_php: v("m-price") ? +v("m-price") : null,
+    property_type: v("m-type"),
+    location_text: v("m-location"),
+    beds: v("m-beds") ? +v("m-beds") : null,
+    baths: v("m-baths") ? +v("m-baths") : null,
+    area_sqm: v("m-area") ? +v("m-area") : null,
+    url: v("m-url"),
+    description: v("m-desc"),
+    agent: v("m-agent"),
+  };
+  fetch("/api/listings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).then(r => r.json()).then(data => {
+    if (data.error) { alert(data.error); return; }
+    closeModal();
+    clearForm();
+    state.page = 1; refresh();
+    loadFacets();
+  }).catch(e => alert("Erreur : " + e.message));
+});
+
+loadFacets();
+refresh();
+</script>
+</body>
+</html>

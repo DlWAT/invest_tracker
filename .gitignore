@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data / database
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Outputs
+*.csv
+*.json
+!config/*.json
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
