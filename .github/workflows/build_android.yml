@@ -1,0 +1,52 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.0'
+
+      - name: Prepare database asset
+        shell: bash
+        run: |
+          mkdir -p android_app/assets
+          if [ -f "android_app/assets/listings.db" ]; then
+            echo "Base deja presente dans android_app/assets (commitee)."
+          elif [ -f "data/listings.db" ]; then
+            cp data/listings.db android_app/assets/listings.db
+            echo "Base copiee depuis data/listings.db."
+          else
+            echo "::error::Aucune base trouvee. Committez android_app/assets/listings.db (git add -f) ou data/listings.db."
+            exit 1
+          fi
+          ls -lh android_app/assets/listings.db
+
+      - name: Create Android scaffolding
+        working-directory: android_app
+        run: flutter create --platforms android --org com.investtracker --project-name invest_tracker .
+
+      - name: Build APK
+        working-directory: android_app
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: invest-tracker-apk
+          path: android_app/build/app/outputs/flutter-apk/app-release.apk

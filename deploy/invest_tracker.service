@@ -1,0 +1,14 @@
+[Unit]
+Description=Invest Tracker web app (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/invest_tracker
+Environment="PATH=/opt/invest_tracker/.venv/bin"
+ExecStart=/opt/invest_tracker/.venv/bin/gunicorn --workers 2 --threads 4 --bind 127.0.0.1:5000 --timeout 120 --chdir /opt/invest_tracker app:app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

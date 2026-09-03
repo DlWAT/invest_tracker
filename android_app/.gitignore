@@ -1,0 +1,12 @@
+# Build (généré par `flutter create`)
+/build/
+/.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+# Android local build
+/android/local.properties
+/android/.gradle/
+/android/app/debug/
+/android/app/profile/
+/android/app/release/

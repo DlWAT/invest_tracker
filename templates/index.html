@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Philippine Airbnb Scanner — Explorer</title>
+<title>Philippine Airbnb Scanner</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #0a0e14;
@@ -55,6 +57,78 @@
     background: var(--bg-soft); border: 1px solid var(--border);
     padding: 4px 10px; border-radius: 999px;
   }
+  .header-btn {
+    background: linear-gradient(135deg, #10b981, #0d9488); color: #04231a;
+    border: none; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+    font-size: 13px; font-weight: 700; transition: filter .15s;
+  }
+  .header-btn:hover { filter: brightness(1.1); }
+  .header-btn.ghost {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    font-weight: 600;
+  }
+  .header-btn.ghost:hover { filter: none; border-color: var(--accent); }
+  .header-btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+  header select.country-select {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 7px 34px 7px 12px; font-size: 13px; font-weight: 600;
+    cursor: pointer; appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%238a99a8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 10px center;
+  }
+
+  /* --- Tabs --- */
+  nav.tabs {
+    position: sticky; top: 63px; z-index: 19;
+    display: flex; gap: 4px; padding: 10px 22px;
+    background: rgba(10,14,20,.7); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav.tabs .tab {
+    background: none; border: 1px solid transparent; color: var(--muted);
+    padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: 13.5px; font-weight: 600;
+    transition: all .15s;
+  }
+  nav.tabs .tab:hover { color: var(--text); background: var(--bg-soft); }
+  nav.tabs .tab.active { color: #34d399; background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* --- Favorite zones bar --- */
+  .zones-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 22px; border-bottom: 1px solid var(--border);
+    background: rgba(10,14,20,.7); backdrop-filter: blur(10px);
+  }
+  .zones-bar .zlbl { font-size: 12px; color: var(--muted); font-weight: 600; margin-right: 2px; }
+  .zone-chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px 5px 9px;
+    border: 1px solid var(--border); border-radius: 20px; background: var(--card);
+    font-size: 12px; cursor: pointer; user-select: none; color: var(--muted);
+    transition: all .15s;
+  }
+  .zone-chip .box {
+    width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
+    border: 1.5px solid var(--muted-2); background: var(--bg-soft);
+    display: inline-flex; align-items: center; justify-content: center; transition: all .15s;
+  }
+  .zone-chip .box::after {
+    content: "✓"; color: #04231a; font-size: 10px; font-weight: 800; line-height: 1;
+    opacity: 0; transform: scale(.4); transition: all .12s;
+  }
+  .zone-chip:hover { border-color: var(--accent); color: var(--text); }
+  .zone-chip input { display: none; }
+  .zone-chip input:checked ~ .box { background: var(--accent); border-color: var(--accent); }
+  .zone-chip input:checked ~ .box::after { opacity: 1; transform: scale(1); }
+  .zone-chip.on { background: rgba(16,185,129,.14); color: #34d399; border-color: var(--accent); }
+  .zone-clear {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 5px 12px; border-radius: 20px; cursor: pointer; font-size: 12px;
+    transition: color .15s, border-color .15s;
+  }
+  .zone-clear:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+  .zone-clear:disabled { opacity: .4; cursor: default; }
+
   .toolbar {
     padding: 14px 22px 6px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
   }
@@ -157,7 +231,7 @@
   }
   .card {
     background: var(--card); border: 1px solid var(--border-soft); border-radius: var(--radius);
-    overflow: hidden; display: flex; flex-direction: column;
+    overflow: hidden; display: flex; flex-direction: column; cursor: pointer;
     transition: transform .18s, border-color .18s, box-shadow .18s;
   }
   .card:hover {
@@ -203,6 +277,16 @@
   .tag.zone { background: rgba(16,185,129,.14); color: #34d399; }
   .meta { font-size: 11px; color: var(--muted-2); display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; }
   .meta .agent { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+  .title-row { display: flex; align-items: flex-start; gap: 8px; }
+  .title-row .title { flex: 1; }
+  .fav-btn {
+    background: none; border: none; cursor: pointer; color: var(--muted-2);
+    font-size: 19px; line-height: 1; padding: 0 2px; flex-shrink: 0;
+    transition: color .15s, transform .15s;
+  }
+  .fav-btn:hover { color: var(--gold); transform: scale(1.2); }
+  .fav-btn.on { color: var(--gold); }
+  .spark { display: block; margin-top: 2px; }
   a.link {
     margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     text-decoration: none; background: linear-gradient(135deg, #10b981, #0d9488);
@@ -223,12 +307,53 @@
   .empty { grid-column: 1/-1; text-align: center; color: var(--muted); padding: 70px 0; font-size: 15px; }
   .spin { grid-column: 1/-1; text-align: center; padding: 50px; color: var(--muted); }
 
+  /* --- Home dashboard --- */
+  .stat-cards {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px; padding: 18px 22px 4px;
+  }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border-soft); border-radius: 14px;
+    padding: 16px 18px;
+  }
+  .stat-card .stat-val { font-size: 26px; font-weight: 700; color: #34d399; }
+  .stat-card .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .home-col h3 { padding: 20px 22px 4px; margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
+  .trends-head {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 18px 22px 2px;
+  }
+  .trends-head h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text); }
+
+  /* --- Collect tab --- */
+  .collect-panel {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 18px 22px 4px;
+  }
+  .collect-panel .collect-state { font-size: 13px; color: var(--muted); }
+  .collect-stats { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 22px 2px; }
+  .collect-stats .cstat {
+    background: var(--card); border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 8px 14px; font-size: 12.5px; color: var(--muted);
+  }
+  .collect-stats .cstat b { display: block; font-size: 17px; color: #34d399; }
+  .collect-log {
+    margin: 10px 22px 24px; background: #0b0f16; border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px; height: 420px; overflow-y: auto;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.55;
+    color: #a5b2be;
+  }
+  .collect-log .line .t { color: var(--muted-2); margin-right: 8px; }
+  .collect-log .line.ok { color: #6ee7b7; }
+  .collect-log .line.warn { color: #fca5a5; }
+
   /* --- Map (right half of filters) --- */
   .filters-col {
     flex: 1 1 380px; min-width: 300px;
     display: flex; flex-wrap: wrap; gap: 16px; align-content: flex-start;
   }
   .map-section {
+    position: relative;
     flex: 1 1 400px; min-width: 320px; min-height: 460px;
     display: flex; flex-direction: column;
     border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
@@ -249,19 +374,42 @@
   }
   .map-controls button:hover { border-color: var(--accent); }
   #map { flex: 1; min-height: 320px; background: #0d1219; }
+  .map-legend {
+    position: absolute; right: 12px; bottom: 12px; z-index: 500;
+    background: rgba(19,26,36,.94); border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 12px; font-size: 11px; color: var(--muted); min-width: 150px;
+  }
+  .map-legend .legend-title { font-weight: 600; color: var(--text); margin-bottom: 6px; font-size: 11.5px; }
+  .map-legend .legend-bar {
+    height: 10px; border-radius: 6px; margin-bottom: 6px;
+    background: linear-gradient(to right, hsl(130,55%,42%), hsl(65,55%,42%), hsl(0,55%,42%));
+  }
+  .map-legend .legend-labels { display: flex; justify-content: space-between; }
   .leaflet-container { background: #0d1219; }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #141a22; color: var(--text); }
   .leaflet-popup-content a { color: #34d399; }
   .map-tip { font-size: 12px; line-height: 1.4; }
   .map-tip b { display: block; font-size: 12.5px; }
 
-  /* --- Manual add (Facebook / rush sale) --- */
-  .header-btn {
-    background: linear-gradient(135deg, #10b981, #0d9488); color: #04231a;
-    border: none; padding: 8px 14px; border-radius: 10px; cursor: pointer;
-    font-size: 13px; font-weight: 700; transition: filter .15s;
+  /* --- Analyse tab --- */
+  .analyse-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+    padding: 18px 22px 24px;
   }
-  .header-btn:hover { filter: brightness(1.1); }
+  .analyse-card {
+    background: var(--card); border: 1px solid var(--border-soft); border-radius: 14px;
+    padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .analyse-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .analyse-controls h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .analyse-chart-wrap { position: relative; height: 460px; }
+  .analyse-map-wrap {
+    position: relative; flex: 1; min-height: 460px;
+    border-radius: 10px; overflow: hidden; border: 1px solid var(--border);
+  }
+  #analyse-map { position: absolute; inset: 0; background: #0d1219; }
+  @media (max-width: 900px) { .analyse-grid { grid-template-columns: 1fr; } }
+
   textarea {
     width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
     font-size: 13px; background: var(--bg-soft); color: var(--text); resize: vertical;
@@ -285,6 +433,11 @@
   .modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
   .modal-body .row { display: flex; gap: 10px; }
   .modal-body .row > * { flex: 1; min-width: 0; }
+  .modal.wide { max-width: 580px; }
+  .detail-price { font-size: 22px; font-weight: 700; }
+  .detail-price small { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .detail-specs { color: var(--muted); font-size: 13px; }
+  #d-chart { max-height: 260px; }
 
   ::-webkit-scrollbar { width: 10px; }
   ::-webkit-scrollbar-thumb { background: #24303f; border-radius: 6px; }
@@ -295,95 +448,213 @@
 <header>
   <div class="logo">🇵🇭</div>
   <h1>Philippine Airbnb Scanner</h1>
-  <span class="count" id="count">chargement…</span>
+  <span class="count" id="count" data-i18n="loading">chargement…</span>
   <span style="flex:1"></span>
-  <button class="header-btn" id="add-btn">＋ Ajouter</button>
+  <select id="country-select" class="country-select" title="Changer de pays">
+    <option value="ph"{% if country.id == 'ph' %} selected{% endif %}>🇵🇭 Philippines</option>
+    <option value="fr"{% if country.id == 'fr' %} selected{% endif %}>🇫🇷 France</option>
+  </select>
+  <button class="header-btn ghost" id="lang-btn" title="Changer de langue / Switch language">FR</button>
+  <button class="header-btn" id="add-btn" data-i18n="add">＋ Ajouter</button>
 </header>
 
-<div class="toolbar">
-  <input type="text" class="search" id="q" placeholder="Rechercher (titre, lieu, description, agent)…">
-  <select id="sort">
-    <option value="newest">Plus récent</option>
-    <option value="price_asc">Prix croissant</option>
-    <option value="price_desc">Prix décroissant</option>
-    <option value="psqm_asc">Prix/m² croissant</option>
-    <option value="psqm_desc">Prix/m² décroissant</option>
-    <option value="drop_desc">Baisse de prix</option>
-    <option value="rise_desc">Hausse de prix</option>
-    <option value="area_desc">Surface décroissante</option>
-    <option value="beds_desc">Chambres décroissant</option>
-  </select>
-  <select id="per_page">
-    <option value="24">24 / page</option>
-    <option value="48">48 / page</option>
-    <option value="96">96 / page</option>
-  </select>
-</div>
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="home" data-i18n="tab_home">Accueil</button>
+  <button class="tab" data-tab="search" data-i18n="tab_search">Recherches</button>
+  <button class="tab" data-tab="analyse" data-i18n="tab_analyse">Analyse</button>
+  <button class="tab" data-tab="trends" data-i18n="tab_trends">Tendances</button>
+  <button class="tab" data-tab="favorites" data-i18n="tab_favorites">Favoris</button>
+  <button class="tab" data-tab="collect" data-i18n="tab_collect">Collecte</button>
+</nav>
 
-<details class="filters" id="filters">
-  <summary>⚙️ Filtres & Carte</summary>
-  <div class="inner">
-    <div class="filters-col">
-      <div class="grp" style="flex:1 1 320px; min-width:300px;">
-        <h4>Province (par région)</h4>
-        <div class="region-host" id="province-regions"></div>
-      </div>
-      <div class="grp">
-        <h4>Type de bien</h4>
-        <div class="chk-group" id="type-chk"></div>
-      </div>
-      <div class="grp">
-        <h4>Zone cible</h4>
-        <div class="chk-group" id="zone-chk"></div>
-      </div>
-      <div class="grp">
-        <h4>Prix (₱)</h4>
-        <div style="display:flex; gap:6px;">
-          <input type="number" id="min_price" placeholder="min" style="width:92px">
-          <input type="number" id="max_price" placeholder="max" style="width:92px">
-        </div>
-        <h4>Surface (m²)</h4>
-        <div style="display:flex; gap:6px;">
-          <input type="number" id="min_area" placeholder="min" style="width:92px">
-          <input type="number" id="max_area" placeholder="max" style="width:92px">
-        </div>
-      </div>
-      <div class="grp">
-        <h4>Chambres min</h4>
-        <input type="number" id="min_beds" placeholder="ex. 2" style="width:92px">
-        <h4 style="margin-top:14px;">Options</h4>
-        <label class="chip"><input type="checkbox" id="has_gps"><span class="box"></span><span>avec GPS</span></label>
-        <label class="chip" style="margin-top:6px;"><input type="checkbox" id="price_drop"><span class="box"></span><span>baisse de prix</span></label>
-      </div>
+<div class="zones-bar" id="fav-zones-bar"></div>
+
+<main>
+  <!-- ===== Home ===== -->
+  <section class="tab-content active" id="tab-home">
+    <div class="stat-cards">
+      <div class="stat-card"><div class="stat-val" id="stat-total">–</div><div class="stat-label" data-i18n="home_stat_listings">Annonces</div></div>
+      <div class="stat-card"><div class="stat-val" id="stat-favorites">–</div><div class="stat-label" data-i18n="home_stat_favorites">Favoris</div></div>
+      <div class="stat-card"><div class="stat-val" id="stat-drops">–</div><div class="stat-label" data-i18n="home_stat_drops">Baisses de prix</div></div>
+      <div class="stat-card"><div class="stat-val" id="stat-rises">–</div><div class="stat-label" data-i18n="home_stat_rises">Hausses de prix</div></div>
+      <div class="stat-card"><div class="stat-val" id="stat-zones">–</div><div class="stat-label" data-i18n="home_stat_zones">Zones cibles</div></div>
+      <div class="stat-card"><div class="stat-val" id="stat-newest">–</div><div class="stat-label" data-i18n="home_stat_last">Dernière collecte</div></div>
+    </div>
+    <div class="home-col"><h3 data-i18n="home_recent">Récents</h3><div class="grid" id="home-recent"></div></div>
+    <div class="home-col"><h3 data-i18n="home_big_drops">Plus fortes baisses</h3><div class="grid" id="home-drops"></div></div>
+  </section>
+
+  <!-- ===== Search ===== -->
+  <section class="tab-content" id="tab-search">
+    <div class="toolbar">
+      <input type="text" class="search" id="q" data-i18n-ph="search_placeholder" placeholder="Rechercher (titre, lieu, description, agent)…">
+      <select id="sort">
+        <option value="newest" data-i18n="sort_recent">Plus récent</option>
+        <option value="price_asc" data-i18n="sort_price_asc">Prix croissant</option>
+        <option value="price_desc" data-i18n="sort_price_desc">Prix décroissant</option>
+        <option value="psqm_asc" data-i18n="sort_psqm_asc">Prix/m² croissant</option>
+        <option value="psqm_desc" data-i18n="sort_psqm_desc">Prix/m² décroissant</option>
+        <option value="drop_desc" data-i18n="sort_drop">Baisse de prix</option>
+        <option value="rise_desc" data-i18n="sort_rise">Hausse de prix</option>
+        <option value="area_desc" data-i18n="sort_area_desc">Surface décroissante</option>
+        <option value="beds_desc" data-i18n="sort_beds_desc">Chambres décroissant</option>
+      </select>
+      <select id="per_page">
+        <option value="24">24 / page</option>
+        <option value="48">48 / page</option>
+        <option value="96">96 / page</option>
+      </select>
     </div>
 
-    <div class="map-section">
-      <div class="map-controls">
-        <span class="map-title">🗺️ Carte</span>
-        <span>Rayon : <span class="radval" id="radius-label">30 km</span></span>
-        <input type="range" id="radius" min="1" max="300" value="30">
-        <button id="map-clear">Effacer</button>
-        <span id="map-count" style="color:#34d399"></span>
-        <span id="map-hint" style="font-size:11px;">📍 Cliquez sur la carte, puis ajustez le rayon</span>
-      </div>
-      <div id="map"></div>
-    </div>
-  </div>
-</details>
+    <details class="filters" id="filters">
+      <summary data-i18n="filters_title">⚙️ Filtres &amp; Carte</summary>
+      <div class="inner">
+        <div class="filters-col">
+          <div class="grp" style="flex:1 1 320px; min-width:300px;">
+            <h4 data-i18n="filters_province">Province (par région)</h4>
+            <div class="region-host" id="province-regions"></div>
+          </div>
+          <div class="grp">
+            <h4 data-i18n="filters_type">Type de bien</h4>
+            <div class="chk-group" id="type-chk"></div>
+          </div>
+          <div class="grp">
+            <h4 data-i18n="filters_zone">Zone cible</h4>
+            <div class="chk-group" id="zone-chk"></div>
+          </div>
+          <div class="grp">
+            <h4 data-i18n="filters_price">Prix (₱)</h4>
+            <div style="display:flex; gap:6px;">
+              <input type="number" id="min_price" placeholder="min" style="width:92px">
+              <input type="number" id="max_price" placeholder="max" style="width:92px">
+            </div>
+            <h4 data-i18n="filters_area">Surface (m²)</h4>
+            <div style="display:flex; gap:6px;">
+              <input type="number" id="min_area" placeholder="min" style="width:92px">
+              <input type="number" id="max_area" placeholder="max" style="width:92px">
+            </div>
+          </div>
+          <div class="grp">
+            <h4 data-i18n="filters_beds">Chambres min</h4>
+            <input type="number" id="min_beds" placeholder="ex. 2" style="width:92px">
+            <h4 style="margin-top:14px;" data-i18n="filters_options">Options</h4>
+            <label class="chip"><input type="checkbox" id="has_gps"><span class="box"></span><span data-i18n="filters_gps">avec GPS</span></label>
+            <label class="chip" style="margin-top:6px;"><input type="checkbox" id="price_drop"><span class="box"></span><span data-i18n="filters_drop">baisse de prix</span></label>
+            <label class="chip" style="margin-top:6px;"><input type="checkbox" id="price_rise"><span class="box"></span><span data-i18n="filters_rise">hausse de prix</span></label>
+          </div>
+        </div>
 
-<div class="grid" id="grid"></div>
-<div class="pager" id="pager"></div>
+        <div class="map-section">
+          <div class="map-controls">
+            <span class="map-title" data-i18n="map_title">🗺️ Carte</span>
+            <span><span data-i18n="map_radius">Rayon :</span> <span class="radval" id="radius-label">30 km</span></span>
+            <input type="range" id="radius" min="1" max="300" value="30">
+            <select id="map-metric">
+              <option value="" data-i18n="map_metric_regions">Régions</option>
+              <option value="psqm" data-i18n="map_metric_psqm">Prix/m² médian</option>
+              <option value="price" data-i18n="map_metric_price">Prix médian</option>
+              <option value="count" data-i18n="map_metric_count">Nb annonces</option>
+              <option value="heat" data-i18n="map_metric_heat">Zone d'influence (gravité)</option>
+            </select>
+            <button id="map-clear" data-i18n="map_clear">Effacer</button>
+            <span id="map-count" style="color:#34d399"></span>
+            <span id="map-markers-count" style="color:#34d399"></span>
+            <span id="map-hint" style="font-size:11px;" data-i18n="map_hint">📍 Cliquez sur la carte, puis ajustez le rayon</span>
+          </div>
+          <div id="map"></div>
+          <div class="map-legend" id="map-legend" style="display:none"></div>
+        </div>
+      </div>
+    </details>
+
+    <div class="grid" id="search-grid"></div>
+    <div class="pager" id="search-pager"></div>
+  </section>
+
+  <!-- ===== Analyse ===== -->
+  <section class="tab-content" id="tab-analyse">
+    <div class="analyse-grid">
+      <div class="analyse-card">
+        <div class="analyse-controls">
+          <h3 data-i18n="analyse_evolution_title">📈 Évolution des prix</h3>
+          <select id="analyse-province"></select>
+        </div>
+        <div class="analyse-chart-wrap">
+          <canvas id="analyse-evolution-chart"></canvas>
+        </div>
+      </div>
+      <div class="analyse-card">
+        <div class="analyse-controls">
+          <h3 data-i18n="analyse_map_title">🗺️ Carte — métrique</h3>
+          <select id="analyse-map-metric">
+            <option value="" data-i18n="map_metric_regions">Régions</option>
+            <option value="psqm" data-i18n="map_metric_psqm">Prix/m² médian</option>
+            <option value="price" data-i18n="map_metric_price">Prix médian</option>
+            <option value="count" data-i18n="map_metric_count">Nb annonces</option>
+            <option value="heat" data-i18n="map_metric_heat">Zone d'influence (gravité)</option>
+          </select>
+          <span id="analyse-markers-count" style="color:#34d399"></span>
+        </div>
+        <div class="analyse-map-wrap">
+          <div id="analyse-map"></div>
+          <div class="map-legend" id="analyse-map-legend" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Tendances ===== -->
+  <section class="tab-content" id="tab-trends">
+    <div class="trends-head">
+      <h3 data-i18n="trends_title">📉📈 Variations de prix — 30 derniers jours</h3>
+      <span class="count" id="trends-summary"></span>
+    </div>
+    <div class="home-col"><h3 data-i18n="trends_rises">Hausses</h3><div class="grid" id="trends-rises"></div></div>
+    <div class="home-col"><h3 data-i18n="trends_drops">Baisses</h3><div class="grid" id="trends-drops"></div></div>
+  </section>
+
+  <!-- ===== Favorites ===== -->
+  <section class="tab-content" id="tab-favorites">
+    <div class="toolbar">
+      <select id="fav-sort">
+        <option value="newest" data-i18n="sort_recent">Plus récent</option>
+        <option value="price_asc" data-i18n="sort_price_asc">Prix croissant</option>
+        <option value="price_desc" data-i18n="sort_price_desc">Prix décroissant</option>
+        <option value="psqm_asc" data-i18n="sort_psqm_asc">Prix/m² croissant</option>
+        <option value="drop_desc" data-i18n="sort_drop">Baisse de prix</option>
+      </select>
+      <select id="fav-per-page">
+        <option value="24">24 / page</option>
+        <option value="48">48 / page</option>
+        <option value="96">96 / page</option>
+      </select>
+      <span class="count" id="fav-count"></span>
+    </div>
+    <div class="grid" id="fav-grid"></div>
+    <div class="pager" id="fav-pager"></div>
+  </section>
+
+  <!-- ===== Collect ===== -->
+  <section class="tab-content" id="tab-collect">
+    <div class="collect-panel">
+      <button class="header-btn" id="collect-btn" data-i18n="collect_update">Mettre à jour la base</button>
+      <span class="collect-state" id="collect-state"></span>
+    </div>
+    <div class="collect-stats" id="collect-stats"></div>
+    <div class="collect-log" id="collect-log"></div>
+  </section>
+</main>
 
 <div class="modal-overlay" id="add-modal" style="display:none">
   <div class="modal">
     <div class="modal-head">
-      <h3>Ajouter une annonce (Facebook / manuel)</h3>
+      <h3 data-i18n="modal_add_title">Ajouter une annonce (Facebook / manuel)</h3>
       <button class="modal-close" id="modal-close">✕</button>
     </div>
     <div class="modal-body">
-      <input type="text" id="m-title" placeholder="Titre *">
+      <input type="text" id="m-title" data-i18n-ph="m_title" placeholder="Titre *">
       <div class="row">
-        <input type="number" id="m-price" placeholder="Prix (₱) *">
+        <input type="number" id="m-price" data-i18n-ph="m_price" placeholder="Prix (₱) *">
         <select id="m-type">
           <option value="house">House</option>
           <option value="condo">Condo</option>
@@ -391,47 +662,392 @@
           <option value="villa">Villa</option>
           <option value="commercial">Commercial</option>
           <option value="apartment">Apartment</option>
-          <option value="other">Autre</option>
+          <option value="other" data-i18n="m_other">Autre</option>
         </select>
       </div>
-      <input type="text" id="m-location" placeholder="Localisation * (ex. Nasugbu, Batangas)">
+      <input type="text" id="m-location" data-i18n-ph="m_location" placeholder="Localisation * (ex. Nasugbu, Batangas)">
       <div class="row">
-        <input type="number" id="m-beds" placeholder="Chambres">
-        <input type="number" id="m-baths" placeholder="SDB">
-        <input type="number" id="m-area" placeholder="Surface m²">
+        <input type="number" id="m-beds" data-i18n-ph="m_beds" placeholder="Chambres">
+        <input type="number" id="m-baths" data-i18n-ph="m_baths" placeholder="SDB">
+        <input type="number" id="m-area" data-i18n-ph="m_area" placeholder="Surface m²">
       </div>
-      <input type="text" id="m-url" placeholder="URL (lien Facebook, optionnel)">
-      <textarea id="m-desc" placeholder="Description (optionnel)" rows="3"></textarea>
-      <input type="text" id="m-agent" placeholder="Agent / contact (optionnel)">
-      <button class="link" id="m-submit" style="width:100%; margin-top:4px;">Enregistrer</button>
+      <input type="text" id="m-url" data-i18n-ph="m_url" placeholder="URL (lien Facebook, optionnel)">
+      <textarea id="m-desc" data-i18n-ph="m_desc" placeholder="Description (optionnel)" rows="3"></textarea>
+      <input type="text" id="m-agent" data-i18n-ph="m_agent" placeholder="Agent / contact (optionnel)">
+      <button class="link" id="m-submit" style="width:100%; margin-top:4px;" data-i18n="m_save">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="detail-modal" style="display:none">
+  <div class="modal wide">
+    <div class="modal-head">
+      <h3 id="d-title">Détail</h3>
+      <button class="modal-close" id="d-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-price" id="d-price"></div>
+      <div class="detail-specs" id="d-specs"></div>
+      <canvas id="d-chart"></canvas>
+      <div id="d-history-empty" style="display:none; color:var(--muted); font-size:13px;" data-i18n="detail_no_history">
+        Pas encore d'historique de prix : un seul relevé. Il s'étoffera au fil des collectes.
+      </div>
+      <a class="link" id="d-link" href="#" target="_blank" rel="noopener" data-i18n="card_view">Voir l’annonce ↗</a>
     </div>
   </div>
 </div>
 
 <script>
+window.COUNTRY = {{ country | tojson }};
+const COUNTRY = window.COUNTRY;
+const SYM = COUNTRY.symbol;
 const RATE_PHP_EUR = 63;
+const LANG_KEY = "ph_scanner_lang";
+let LANG = localStorage.getItem(LANG_KEY) || "fr";
+const LOCALE = () => LANG === "fr" ? "fr-FR" : "en-US";
 
-const state = { page: 1, per_page: 24 };
+const I18N = {
+  fr: {
+    loading: "chargement…",
+    listings: "annonces",
+    add: "＋ Ajouter",
+    tab_home: "Accueil",
+    tab_search: "Recherches",
+    tab_analyse: "Analyse",
+    tab_trends: "Tendances",
+    tab_favorites: "Favoris",
+    tab_collect: "Collecte",
+    search_placeholder: "Rechercher (titre, lieu, description, agent)…",
+    sort_recent: "Plus récent",
+    sort_price_asc: "Prix croissant",
+    sort_price_desc: "Prix décroissant",
+    sort_psqm_asc: "Prix/m² croissant",
+    sort_psqm_desc: "Prix/m² décroissant",
+    sort_drop: "Baisse de prix",
+    sort_rise: "Hausse de prix",
+    sort_area_desc: "Surface décroissante",
+    sort_beds_desc: "Chambres décroissant",
+    filters_title: "⚙️ Filtres & Carte",
+    filters_province: "Province (par région)",
+    filters_type: "Type de bien",
+    filters_zone: "Zone cible",
+    filters_price: "Prix (₱)",
+    filters_area: "Surface (m²)",
+    filters_beds: "Chambres min",
+    filters_options: "Options",
+    filters_gps: "avec GPS",
+    filters_drop: "baisse de prix",
+    filters_rise: "hausse de prix",
+    filters_all: "tout",
+    zones_label: "Zones favorites :",
+    zones_clear: "Effacer",
+    map_title: "🗺️ Carte",
+    map_radius: "Rayon :",
+    map_clear: "Effacer",
+    map_hint: "📍 Cliquez sur la carte, puis ajustez le rayon",
+    map_metric_regions: "Régions",
+    map_metric_psqm: "Prix/m² médian",
+    map_metric_price: "Prix médian",
+    map_metric_count: "Nb annonces",
+    map_metric_heat: "Zone d'influence (gravité)",
+    analyse_evolution_title: "📈 Évolution des prix",
+    analyse_map_title: "🗺️ Carte — métrique",
+    analyse_all: "Toutes provinces",
+    analyse_median_price: "Prix médian (₱)",
+    card_beds: "ch.",
+    card_baths: "sdb",
+    card_prev: "Ancien prix :",
+    card_published: "Mise en ligne :",
+    card_view: "Voir l’annonce ↗",
+    fav_add: "Ajouter aux favoris",
+    fav_remove: "Retirer des favoris",
+    pager_prev: "‹ Précédent",
+    pager_next: "Suivant ›",
+    pager_page: "Page",
+    no_results: "Aucune annonce ne correspond aux filtres.",
+    error_prefix: "Erreur :",
+    modal_add_title: "Ajouter une annonce (Facebook / manuel)",
+    m_title: "Titre *",
+    m_price: "Prix (₱) *",
+    m_location: "Localisation * (ex. Nasugbu, Batangas)",
+    m_beds: "Chambres",
+    m_baths: "SDB",
+    m_area: "Surface m²",
+    m_url: "URL (lien Facebook, optionnel)",
+    m_desc: "Description (optionnel)",
+    m_agent: "Agent / contact (optionnel)",
+    m_save: "Enregistrer",
+    m_other: "Autre",
+    detail_no_history: "Pas encore d'historique de prix : un seul relevé. Il s'étoffera au fil des collectes.",
+    home_stat_listings: "Annonces",
+    home_stat_favorites: "Favoris",
+    home_stat_drops: "Baisses de prix",
+    home_stat_rises: "Hausses de prix",
+    home_stat_zones: "Zones cibles",
+    home_stat_last: "Dernière collecte",
+    home_recent: "Récents",
+    home_big_drops: "Plus fortes baisses",
+    trends_title: "Variations de prix — 30 derniers jours",
+    trends_drops: "Baisses",
+    trends_rises: "Hausses",
+    trends_empty: "Aucune variation détectée sur la période.",
+    fav_empty: "Aucun favori pour l'instant. Cliquez sur ☆ sur une annonce.",
+    collect_update: "Mettre à jour la base",
+    collect_running: "Collecte en cours…",
+    collect_idle: "Prêt",
+    collect_last: "Dernière collecte :",
+    collect_stat_new: "Nouvelles",
+    collect_stat_change: "Changements de prix",
+    collect_stat_updated: "Mises à jour",
+    collect_stat_unchanged: "Inchangées",
+    collect_stat_total: "Total en base"
+  },
+  en: {
+    loading: "loading…",
+    listings: "listings",
+    add: "＋ Add",
+    tab_home: "Home",
+    tab_search: "Search",
+    tab_analyse: "Analysis",
+    tab_trends: "Trends",
+    tab_favorites: "Favorites",
+    tab_collect: "Collect",
+    search_placeholder: "Search (title, location, description, agent)…",
+    sort_recent: "Newest",
+    sort_price_asc: "Price ascending",
+    sort_price_desc: "Price descending",
+    sort_psqm_asc: "Price/m² ascending",
+    sort_psqm_desc: "Price/m² descending",
+    sort_drop: "Price drop",
+    sort_rise: "Price rise",
+    sort_area_desc: "Area descending",
+    sort_beds_desc: "Bedrooms descending",
+    filters_title: "⚙️ Filters & Map",
+    filters_province: "Province (by region)",
+    filters_type: "Property type",
+    filters_zone: "Target zone",
+    filters_price: "Price (₱)",
+    filters_area: "Area (m²)",
+    filters_beds: "Min bedrooms",
+    filters_options: "Options",
+    filters_gps: "with GPS",
+    filters_drop: "price drop",
+    filters_rise: "price rise",
+    filters_all: "all",
+    zones_label: "Favorite zones:",
+    zones_clear: "Clear",
+    map_title: "🗺️ Map",
+    map_radius: "Radius:",
+    map_clear: "Clear",
+    map_hint: "📍 Click the map, then adjust the radius",
+    map_metric_regions: "Regions",
+    map_metric_psqm: "Median price/m²",
+    map_metric_price: "Median price",
+    map_metric_count: "Listings",
+    map_metric_heat: "Influence zone (gravity)",
+    analyse_evolution_title: "📈 Price evolution",
+    analyse_map_title: "🗺️ Map — metric",
+    analyse_all: "All provinces",
+    analyse_median_price: "Median price (₱)",
+    card_beds: "bd",
+    card_baths: "ba",
+    card_prev: "Previous price:",
+    card_published: "Published:",
+    card_view: "View listing ↗",
+    fav_add: "Add to favorites",
+    fav_remove: "Remove from favorites",
+    pager_prev: "‹ Previous",
+    pager_next: "Next ›",
+    pager_page: "Page",
+    no_results: "No listings match your filters.",
+    error_prefix: "Error:",
+    modal_add_title: "Add a listing (Facebook / manual)",
+    m_title: "Title *",
+    m_price: "Price (₱) *",
+    m_location: "Location * (e.g. Nasugbu, Batangas)",
+    m_beds: "Bedrooms",
+    m_baths: "Baths",
+    m_area: "Area m²",
+    m_url: "URL (Facebook link, optional)",
+    m_desc: "Description (optional)",
+    m_agent: "Agent / contact (optional)",
+    m_save: "Save",
+    m_other: "Other",
+    detail_no_history: "No price history yet: only one record. It will grow with future collections.",
+    home_stat_listings: "Listings",
+    home_stat_favorites: "Favorites",
+    home_stat_drops: "Price drops",
+    home_stat_rises: "Price rises",
+    home_stat_zones: "Target zones",
+    home_stat_last: "Last collection",
+    home_recent: "Recent",
+    home_big_drops: "Biggest drops",
+    trends_title: "Price changes — last 30 days",
+    trends_drops: "Drops",
+    trends_rises: "Rises",
+    trends_empty: "No price change detected over the period.",
+    fav_empty: "No favorites yet. Click ☆ on a listing.",
+    collect_update: "Update database",
+    collect_running: "Collecting…",
+    collect_idle: "Idle",
+    collect_last: "Last collection:",
+    collect_stat_new: "New",
+    collect_stat_change: "Price changes",
+    collect_stat_updated: "Updated",
+    collect_stat_unchanged: "Unchanged",
+    collect_stat_total: "Total in db"
+  }
+};
+
+const COUNTRY_LABELS = {
+  fr: {
+    filters_province: "Département (par région)",
+    filters_zone: "Département cible",
+    analyse_all: "Tous départements",
+  },
+};
+
+function t(k) {
+  const override = COUNTRY && COUNTRY_LABELS[COUNTRY.id] && COUNTRY_LABELS[COUNTRY.id][k];
+  if (override) return override;
+  return (I18N[LANG] && I18N[LANG][k]) || I18N.fr[k] || k;
+}
+
+function applyI18n() {
+  document.documentElement.lang = LANG;
+  document.getElementById("lang-btn").textContent = LANG.toUpperCase();
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n).replaceAll("₱", SYM); });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh).replaceAll("₱", SYM); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  buildFavZonesBar();
+}
+
+const state = {
+  tab: "home",
+  search: { page: 1, per_page: 24 },
+  fav: { page: 1, per_page: 24 },
+};
 const mapState = { lat: null, lng: null, radius: 30 };
 let facets = null;
-let map = null, mapMarker = null, mapCircle = null, mapMarkersLayer = null;
-let regionColors = {};
+const FAV_ZONES_KEY = "ph_scanner_fav_zones";
+let favZones = [];
+try { favZones = JSON.parse(localStorage.getItem(FAV_ZONES_KEY) || "[]") || []; } catch (e) { favZones = []; }
 
-function fmtPHP(n) { return n == null ? "—" : "₱" + n.toLocaleString("en-PH"); }
-function fmtEUR(n) { return n == null ? "" : "≈ €" + Math.round(n / RATE_PHP_EUR).toLocaleString("fr-FR"); }
+function buildFavZonesBar() {
+  const host = document.getElementById("fav-zones-bar");
+  if (!host) return;
+  const zones = (COUNTRY.favorite_zones || []).filter(z => z && z.id);
+  if (!zones.length) { host.style.display = "none"; host.innerHTML = ""; return; }
+  host.style.display = "flex";
+  host.innerHTML = '<span class="zlbl">' + t("zones_label") + '</span>' +
+    zones.map(z => {
+      const on = favZones.includes(z.id);
+      return '<label class="zone-chip' + (on ? " on" : "") + '">' +
+        '<input type="checkbox" value="' + esc(z.id) + '"' + (on ? " checked" : "") + '>' +
+        '<span class="box"></span><span>' + esc(z.label || z.id) + '</span></label>';
+    }).join("") +
+    '<button class="zone-clear"' + (favZones.length ? "" : " disabled") + '>' + t("zones_clear") + '</button>';
+
+  host.querySelectorAll(".zone-chip input").forEach(cb => {
+    cb.addEventListener("change", () => {
+      favZones = Array.from(host.querySelectorAll(".zone-chip input:checked")).map(c => c.value);
+      persistFavZones();
+      onZonesChange();
+    });
+  });
+  const clear = host.querySelector(".zone-clear");
+  if (clear) clear.addEventListener("click", () => {
+    if (!favZones.length) return;
+    favZones = [];
+    persistFavZones();
+    buildFavZonesBar();
+    onZonesChange();
+  });
+}
+
+function persistFavZones() {
+  localStorage.setItem(FAV_ZONES_KEY, JSON.stringify(favZones));
+}
+
+function withFavZones(p) {
+  if (favZones.length) p.set("fav_zones", favZones.join(","));
+  return p;
+}
+
+function onZonesChange() {
+  state.search.page = 1;
+  state.fav.page = 1;
+  mapMetricsPromise = null;
+  mapMetricsData = null;
+  heatPointsPromise = null;
+  rerender();
+}
+let map = null, mapMarker = null, mapCircle = null, mapMarkersLayer = null, mapZoomMarkersLayer = null, mapRegionLayer = null;
+let regionColors = {};
+let mapProvinceLayers = {};
+let mapMetricsData = null, mapMetricsPromise = null;
+let mapMetric = "regions", metricRange = null;
+let priceChart = null;
+let analysisMap = null;
+let evolutionChart = null, evolutionData = null;
+let collectRendered = 0;
+let collectTimer = null;
+
+function fmtPrice(n) { return n == null ? "—" : SYM + n.toLocaleString(COUNTRY.id === "ph" ? "en-PH" : LOCALE()); }
+function fmtAlt(n) {
+  if (n == null || COUNTRY.id !== "ph") return "";
+  return "≈ €" + Math.round(n / RATE_PHP_EUR).toLocaleString(LOCALE());
+}
+function fmtAxis(v) {
+  if (v == null) return "";
+  if (COUNTRY.id === "ph") return SYM + (v / 1e6).toFixed(1) + "M";
+  return SYM + Math.round(v / 1000) + "k";
+}
+function fmtPsqm(n) { return n == null ? "—" : SYM + Math.round(n).toLocaleString(LOCALE()) + "/m²"; }
+function fmtCompact(n) {
+  if (n == null) return "";
+  if (n >= 1e6) return Math.round(n / 1e6 * 10) / 10 + "M";
+  if (n >= 1e3) return Math.round(n / 1e3) + "k";
+  return String(n);
+}
 function esc(s) {
   return (s == null ? "" : String(s)).replace(/[&<>"']/g,
     c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(LOCALE());
+}
 
+/* ---------------- Tabs ---------------- */
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-content").forEach(s => s.classList.toggle("active", s.id === "tab-" + tab));
+  if (collectTimer) { clearInterval(collectTimer); collectTimer = null; }
+  if (tab === "home") loadHome();
+  else if (tab === "search") { loadSearch(); if (map) setTimeout(() => map.invalidateSize(), 60); }
+  else if (tab === "analyse") loadAnalyse();
+  else if (tab === "trends") loadTrends();
+  else if (tab === "favorites") loadFavorites();
+  else if (tab === "collect") loadCollect();
+}
+document.getElementById("tabs").addEventListener("click", e => {
+  const b = e.target.closest(".tab");
+  if (b) switchTab(b.dataset.tab);
+});
+
+function rerender() { switchTab(state.tab); }
+
+/* ---------------- Facets / filters ---------------- */
 function loadFacets() {
   fetch("/api/facets").then(r => r.json()).then(f => {
     facets = f;
     buildProvinceFilter(f.regions);
     buildChips("#type-chk", "property_type", f.types);
     buildChips("#zone-chk", "zone_id", f.zones);
-    document.getElementById("min_price").placeholder = "min " + Math.floor(f.price_min/1e6) + "M";
-    document.getElementById("max_price").placeholder = "max " + Math.round(f.price_max/1e6) + "M";
+    document.getElementById("min_price").placeholder = "min " + fmtCompact(f.price_min);
+    document.getElementById("max_price").placeholder = "max " + fmtCompact(f.price_max);
   });
 }
 
@@ -443,7 +1059,7 @@ function makeChip(key, value) {
   lbl.innerHTML = '<input type="checkbox" value="' + esc(value) + '"><span class="box"></span>' + esc(value);
   lbl.querySelector("input").addEventListener("change", () => {
     lbl.classList.toggle("on", lbl.querySelector("input").checked);
-    state.page = 1; refresh();
+    state.search.page = 1; loadSearch();
   });
   return lbl;
 }
@@ -468,7 +1084,7 @@ function buildProvinceFilter(regions) {
     cnt.textContent = reg.provinces.length;
     const rall = document.createElement("button");
     rall.className = "rall";
-    rall.textContent = "tout";
+    rall.textContent = t("filters_all");
     rall.addEventListener("click", e => {
       e.preventDefault();
       e.stopPropagation();
@@ -478,7 +1094,7 @@ function buildProvinceFilter(regions) {
         cb.checked = shouldCheck;
         cb.closest(".chk").classList.toggle("on", shouldCheck);
       });
-      state.page = 1; refresh();
+      state.search.page = 1; loadSearch();
     });
     sum.appendChild(name);
     sum.appendChild(cnt);
@@ -492,12 +1108,12 @@ function buildProvinceFilter(regions) {
   });
 }
 
-function activeFilters() {
+function buildSearchParams() {
   const p = new URLSearchParams();
   const q = document.getElementById("q").value.trim();
   if (q) p.set("q", q);
 
-  document.querySelectorAll(".chk").forEach(lbl => {
+  document.querySelectorAll("#tab-search .chk").forEach(lbl => {
     const cb = lbl.querySelector("input");
     if (cb.checked) {
       const key = lbl.dataset.key, val = lbl.dataset.value;
@@ -513,6 +1129,7 @@ function activeFilters() {
   if (num("min_beds")) p.set("min_beds", num("min_beds"));
   if (document.getElementById("has_gps").checked) p.set("has_gps", "1");
   if (document.getElementById("price_drop").checked) p.set("price_drop", "1");
+  if (document.getElementById("price_rise").checked) p.set("price_rise", "1");
 
   if (mapState.lat != null && mapState.lng != null) {
     p.set("lat", mapState.lat);
@@ -521,11 +1138,13 @@ function activeFilters() {
   }
 
   p.set("sort", document.getElementById("sort").value);
-  p.set("page", state.page);
-  p.set("per_page", state.per_page);
+  p.set("page", state.search.page);
+  p.set("per_page", state.search.per_page);
+  withFavZones(p);
   return p;
 }
 
+/* ---------------- Cards ---------------- */
 function cardHTML(it) {
   const thumb = it.thumb;
   const imgTag = thumb
@@ -539,13 +1158,17 @@ function cardHTML(it) {
   if (it.latitude) badges.push('<span class="badge gps" style="left:auto;right:10px;top:' + (it.is_featured ? 40 : 10) + 'px">📍</span>');
 
   const specs = [];
-  if (it.beds != null) specs.push('<span><b>' + it.beds + '</b> ch.</span>');
-  if (it.baths != null) specs.push('<span><b>' + it.baths + '</b> sdb</span>');
-  if (it.area_sqm != null) specs.push('<span><b>' + Math.round(it.area_sqm).toLocaleString("fr-FR") + '</b> m²</span>');
-  if (it.price_per_sqm != null) specs.push('<span style="color:var(--muted)">' + Math.round(it.price_per_sqm).toLocaleString("fr-FR") + ' ₱/m²</span>');
+  if (it.beds != null) specs.push('<span><b>' + it.beds + '</b> ' + t("card_beds") + '</span>');
+  if (it.baths != null) specs.push('<span><b>' + it.baths + '</b> ' + t("card_baths") + '</span>');
+  if (it.area_sqm != null) specs.push('<span><b>' + Math.round(it.area_sqm).toLocaleString(LOCALE()) + '</b> m²</span>');
+  if (it.price_per_sqm != null) specs.push('<span style="color:var(--muted)">' + fmtPsqm(it.price_per_sqm) + '</span>');
 
   const tags = (it.amenities || []).slice(0, 4).map(a => '<span class="tag">' + esc(a) + '</span>').join("");
   const zone = it.zone_id ? '<span class="tag zone">' + esc(it.zone_id) + '</span>' : '';
+
+  const publishedLine = it.published
+    ? '<div class="meta"><span>' + t("card_published") + '</span><span>' + esc(it.published) + '</span></div>'
+    : '';
 
   let changePill = "";
   let prevPrice = "";
@@ -553,95 +1176,367 @@ function cardHTML(it) {
     const down = it.price_change_pct < 0;
     changePill = '<span class="price-chg ' + (down ? "down" : "up") + '">'
       + (down ? "▼ " : "▲ ") + Math.abs(it.price_change_pct) + '%</span>';
-    prevPrice = '<div class="prev-price">Ancien prix : ' + fmtPHP(it.price_prev) + '</div>';
+    prevPrice = '<div class="prev-price">' + t("card_prev") + ' ' + fmtPrice(it.price_prev) + '</div>';
   }
 
-  return '<div class="card">' +
+  return '<div class="card" data-source="' + esc(it.source) + '" data-external_id="' + esc(it.external_id) + '">' +
     '<div class="thumb">' + badges.join("") + imgTag +
       '<div class="shade"></div>' +
-      '<div class="price">' + fmtPHP(it.price_php) + ' <small>' + fmtEUR(it.price_php) + '</small>' + changePill + '</div>' +
+      '<div class="price">' + fmtPrice(it.price_php) + ' <small>' + fmtAlt(it.price_php) + '</small>' + changePill + '</div>' +
     '</div>' +
     '<div class="body">' +
-      '<div class="title">' + esc(it.title) + '</div>' +
+      '<div class="title-row"><div class="title">' + esc(it.title) + '</div>' +
+        '<button class="fav-btn' + (it.is_favorite ? " on" : "") + '" title="' + (it.is_favorite ? t("fav_remove") : t("fav_add")) + '">' + (it.is_favorite ? "★" : "☆") + '</button></div>' +
       '<div class="loc">📍 ' + esc(it.location_text || it.province || "") + '</div>' +
       '<div class="specs">' + specs.join("") + '</div>' +
       prevPrice +
+      sparkline(it.history) +
       '<div class="tags">' + zone + tags + '</div>' +
       '<div class="meta"><span>' + esc(it.property_type || "") + '</span><span class="agent">' + esc(it.agent || "") + '</span></div>' +
-      '<a class="link" href="' + esc(it.url) + '" target="_blank" rel="noopener">Voir l’annonce ↗</a>' +
+      publishedLine +
+      '<a class="link" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + t("card_view") + '</a>' +
     '</div>' +
   '</div>';
 }
 
-function refresh() {
-  const grid = document.getElementById("grid");
-  grid.innerHTML = '<div class="spin">Chargement…</div>';
-  fetch("/api/listings?" + activeFilters().toString())
-    .then(r => r.json())
-    .then(data => {
-      document.getElementById("count").textContent =
-        data.total.toLocaleString("fr-FR") + " annonces";
-      if (!data.items.length) {
-        grid.innerHTML = '<div class="empty">Aucune annonce ne correspond aux filtres.</div>';
-      } else {
-        grid.innerHTML = data.items.map(cardHTML).join("");
-      }
-      renderPager(data);
-      if (mapMarkersLayer) refreshMapMarkers();
-    })
-    .catch(e => { grid.innerHTML = '<div class="empty">Erreur : ' + esc(e.message) + '</div>'; });
+function sparkline(history) {
+  const prices = (history || []).map(h => h.price_php).filter(p => p != null);
+  if (prices.length < 2) return "";
+  const w = 130, h = 34, pad = 3;
+  const min = Math.min(...prices), max = Math.max(...prices);
+  const span = (max - min) || 1;
+  const pts = prices.map((p, i) => {
+    const x = pad + (w - 2 * pad) * i / (prices.length - 1);
+    const y = pad + (h - 2 * pad) * (1 - (p - min) / span);
+    return x.toFixed(1) + "," + y.toFixed(1);
+  }).join(" ");
+  const down = prices[prices.length - 1] < prices[0];
+  const color = down ? "#fca5a5" : "#34d399";
+  return '<svg class="spark" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+    '<polyline fill="none" stroke="' + color + '" stroke-width="1.6" points="' + pts + '"/>' +
+    '</svg>';
 }
 
-function renderPager(data) {
-  const pager = document.getElementById("pager");
-  pager.innerHTML =
-    '<button ' + (data.page <= 1 ? "disabled" : "") + ' data-p="' + (data.page - 1) + '">‹ Précédent</button>' +
-    '<span class="info">Page ' + data.page + ' / ' + data.pages + '</span>' +
-    '<button ' + (data.page >= data.pages ? "disabled" : "") + ' data-p="' + (data.page + 1) + '">Suivant ›</button>';
-  pager.querySelectorAll("button[data-p]").forEach(b =>
-    b.addEventListener("click", () => { state.page = +b.dataset.p; refresh(); window.scrollTo(0, 0); })
+function renderPager(pagerEl, data, setPage) {
+  pagerEl.innerHTML =
+    '<button ' + (data.page <= 1 ? "disabled" : "") + ' data-p="' + (data.page - 1) + '">' + t("pager_prev") + '</button>' +
+    '<span class="info">' + t("pager_page") + ' ' + data.page + ' / ' + data.pages + '</span>' +
+    '<button ' + (data.page >= data.pages ? "disabled" : "") + ' data-p="' + (data.page + 1) + '">' + t("pager_next") + '</button>';
+  pagerEl.querySelectorAll("button[data-p]").forEach(b =>
+    b.addEventListener("click", () => { setPage(+b.dataset.p); })
   );
 }
 
+/* ---------------- Search tab ---------------- */
+function loadSearch() {
+  const grid = document.getElementById("search-grid");
+  grid.innerHTML = '<div class="spin">' + t("loading") + '</div>';
+  fetch("/api/listings?" + buildSearchParams().toString())
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById("count").textContent =
+        data.total.toLocaleString(LOCALE()) + " " + t("listings");
+      if (!data.items.length) {
+        grid.innerHTML = '<div class="empty">' + t("no_results") + '</div>';
+      } else {
+        grid.innerHTML = data.items.map(cardHTML).join("");
+      }
+      renderPager(document.getElementById("search-pager"), data, pg => {
+        state.search.page = pg; loadSearch(); window.scrollTo(0, 0);
+      });
+      if (mapMarkersLayer) refreshMapMarkers();
+    })
+    .catch(e => { grid.innerHTML = '<div class="empty">' + t("error_prefix") + ' ' + esc(e.message) + '</div>'; });
+}
+
+/* ---------------- Favorites tab ---------------- */
+function loadFavorites() {
+  const grid = document.getElementById("fav-grid");
+  grid.innerHTML = '<div class="spin">' + t("loading") + '</div>';
+  const p = new URLSearchParams();
+  p.set("favorites", "1");
+  p.set("sort", document.getElementById("fav-sort").value);
+  p.set("page", state.fav.page);
+  p.set("per_page", state.fav.per_page);
+  withFavZones(p);
+  fetch("/api/listings?" + p.toString())
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById("fav-count").textContent =
+        data.total.toLocaleString(LOCALE()) + " " + t("listings");
+      if (!data.items.length) {
+        grid.innerHTML = '<div class="empty">' + t("fav_empty") + '</div>';
+      } else {
+        grid.innerHTML = data.items.map(cardHTML).join("");
+      }
+      renderPager(document.getElementById("fav-pager"), data, pg => {
+        state.fav.page = pg; loadFavorites(); window.scrollTo(0, 0);
+      });
+    })
+    .catch(e => { grid.innerHTML = '<div class="empty">' + t("error_prefix") + ' ' + esc(e.message) + '</div>'; });
+}
+
+/* ---------------- Home tab ---------------- */
+function loadHome() {
+  fetch("/api/stats?" + withFavZones(new URLSearchParams()).toString()).then(r => r.json()).then(s => {
+    document.getElementById("stat-total").textContent = s.total.toLocaleString(LOCALE());
+    document.getElementById("stat-favorites").textContent = s.favorites.toLocaleString(LOCALE());
+    document.getElementById("stat-drops").textContent = s.price_drops.toLocaleString(LOCALE());
+    document.getElementById("stat-rises").textContent = (s.price_rises ?? 0).toLocaleString(LOCALE());
+    document.getElementById("stat-zones").textContent = s.zones.toLocaleString(LOCALE());
+    document.getElementById("stat-newest").textContent = fmtDate(s.newest);
+  }).catch(() => {});
+
+  const homePath = (sort) => {
+    const p = new URLSearchParams({ sort: sort, per_page: "8" });
+    return "/api/listings?" + withFavZones(p).toString();
+  };
+
+  fetch(homePath("newest")).then(r => r.json()).then(d => {
+    document.getElementById("home-recent").innerHTML = d.items.map(cardHTML).join("");
+  }).catch(() => {});
+
+  fetch(homePath("drop_desc")).then(r => r.json()).then(d => {
+    document.getElementById("home-drops").innerHTML = d.items.map(cardHTML).join("");
+  }).catch(() => {});
+}
+
+/* ---------------- Collect tab ---------------- */
+function loadCollect() {
+  updateCollectStatus();
+  collectTimer = setInterval(updateCollectStatus, 1500);
+}
+
+function updateCollectStatus() {
+  fetch("/api/collect/status").then(r => r.json()).then(d => {
+    const btn = document.getElementById("collect-btn");
+    const stateEl = document.getElementById("collect-state");
+    btn.disabled = d.running;
+    if (d.running) {
+      stateEl.textContent = t("collect_running");
+    } else if (d.finished) {
+      stateEl.textContent = t("collect_last") + " " + fmtDate(d.finished) + (d.error ? " — " + d.error : "");
+    } else {
+      stateEl.textContent = t("collect_idle");
+    }
+    renderCollectStats(d.stats);
+    renderCollectLog(d.log);
+  }).catch(() => {});
+}
+
+function renderCollectStats(stats) {
+  const host = document.getElementById("collect-stats");
+  if (!stats) { host.innerHTML = ""; return; }
+  const items = [
+    ["collect_stat_new", stats.new],
+    ["collect_stat_change", stats.price_change],
+    ["collect_stat_updated", stats.updated],
+    ["collect_stat_unchanged", stats.unchanged],
+  ];
+  host.innerHTML = items.map(([k, v]) =>
+    '<div class="cstat"><b>' + v.toLocaleString(LOCALE()) + '</b>' + t(k) + '</div>').join("");
+}
+
+function renderCollectLog(log) {
+  const host = document.getElementById("collect-log");
+  if (collectRendered > log.length) { collectRendered = 0; host.innerHTML = ""; }
+  for (let i = collectRendered; i < log.length; i++) {
+    const entry = log[i];
+    const line = entry.line || "";
+    let cls = "";
+    if (line.startsWith("[ok]")) cls = "ok";
+    else if (line.startsWith("[!]") || line.startsWith("[error]")) cls = "warn";
+    const div = document.createElement("div");
+    div.className = "line " + cls;
+    const tspan = document.createElement("span");
+    tspan.className = "t";
+    tspan.textContent = new Date(entry.t).toLocaleTimeString(LOCALE());
+    div.appendChild(tspan);
+    div.appendChild(document.createTextNode(line));
+    host.appendChild(div);
+  }
+  collectRendered = log.length;
+  host.scrollTop = host.scrollHeight;
+}
+
+document.getElementById("collect-btn").addEventListener("click", () => {
+  collectRendered = 0;
+  document.getElementById("collect-log").innerHTML = "";
+  document.getElementById("collect-state").textContent = t("collect_running");
+  fetch("/api/collect/start", { method: "POST" }).then(r => r.json()).then(d => {
+    if (d.error) alert(d.error);
+  }).catch(e => alert(t("error_prefix") + " " + e.message));
+});
+
+/* ---------------- Favorites toggle + detail modal ---------------- */
+document.addEventListener("click", e => {
+  const star = e.target.closest(".fav-btn");
+  if (star) { toggleFavorite(star); return; }
+  const card = e.target.closest(".card");
+  if (card && !e.target.closest("a")) {
+    openDetail(card.dataset.source, card.dataset.external_id);
+  }
+});
+
+function toggleFavorite(btn) {
+  const card = btn.closest(".card");
+  const source = card.dataset.source, external_id = card.dataset.external_id;
+  const isFav = btn.classList.contains("on");
+  fetch("/api/favorites", {
+    method: isFav ? "DELETE" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source: source, external_id: external_id })
+  }).then(r => r.json()).then(data => {
+    if (data.error) { alert(data.error); return; }
+    btn.classList.toggle("on", !isFav);
+    btn.textContent = isFav ? "☆" : "★";
+    btn.title = isFav ? t("fav_add") : t("fav_remove");
+    if (state.tab === "favorites") loadFavorites();
+  }).catch(err => alert(t("error_prefix") + " " + err.message));
+}
+
+function openDetail(source, external_id) {
+  const url = "/api/listing-history?source=" + encodeURIComponent(source) +
+    "&external_id=" + encodeURIComponent(external_id);
+  document.getElementById("detail-modal").style.display = "flex";
+  document.getElementById("d-title").textContent = "…";
+  document.getElementById("d-price").textContent = "";
+  document.getElementById("d-specs").textContent = "";
+  document.getElementById("d-link").href = "#";
+  fetch(url).then(r => r.json()).then(data => {
+    if (data.error) { alert(data.error); return; }
+    const l = data.listing;
+    document.getElementById("d-title").textContent = l.title || "Sans titre";
+    document.getElementById("d-price").innerHTML =
+      fmtPrice(l.price_php) + " <small>" + fmtAlt(l.price_php) + "</small>";
+    const specs = [];
+    if (l.beds != null) specs.push(l.beds + " " + t("card_beds"));
+    if (l.baths != null) specs.push(l.baths + " " + t("card_baths"));
+    if (l.area_sqm != null) specs.push(Math.round(l.area_sqm).toLocaleString(LOCALE()) + " m²");
+    if (l.price_per_sqm != null) specs.push(fmtPsqm(l.price_per_sqm));
+    document.getElementById("d-specs").textContent =
+      specs.join(" · ") + " — " + (l.location_text || l.province || "");
+    document.getElementById("d-link").href = l.url || "#";
+    renderPriceChart(data.history || []);
+  }).catch(err => alert(t("error_prefix") + " " + err.message));
+}
+
+function renderPriceChart(history) {
+  const canvas = document.getElementById("d-chart");
+  const empty = document.getElementById("d-history-empty");
+  if (priceChart) { priceChart.destroy(); priceChart = null; }
+  if (!history || history.length < 2) {
+    canvas.style.display = "none";
+    empty.style.display = "block";
+    return;
+  }
+  canvas.style.display = "block";
+  empty.style.display = "none";
+  const labels = history.map(h => new Date(h.seen_at).toLocaleDateString(LOCALE()));
+  const data = history.map(h => h.price_php);
+  priceChart = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "Prix (" + SYM + ")",
+        data: data,
+        borderColor: "#10b981",
+        backgroundColor: "rgba(16,185,129,.15)",
+        fill: true,
+        tension: 0.2,
+        pointBackgroundColor: "#10b981",
+        pointRadius: 3,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          ticks: { callback: v => fmtAxis(v), color: "#8a99a8" },
+          grid: { color: "#1b2531" },
+        },
+        x: { ticks: { color: "#8a99a8" }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function closeDetail() {
+  document.getElementById("detail-modal").style.display = "none";
+  if (priceChart) { priceChart.destroy(); priceChart = null; }
+}
+document.getElementById("d-close").addEventListener("click", closeDetail);
+document.getElementById("detail-modal").addEventListener("click", e => {
+  if (e.target === document.getElementById("detail-modal")) closeDetail();
+});
+
+/* ---------------- Search toolbar events ---------------- */
 let debounce = null;
 document.getElementById("q").addEventListener("input", () => {
   clearTimeout(debounce);
-  debounce = setTimeout(() => { state.page = 1; refresh(); }, 300);
+  debounce = setTimeout(() => { state.search.page = 1; loadSearch(); }, 300);
 });
-document.getElementById("sort").addEventListener("change", () => { state.page = 1; refresh(); });
+document.getElementById("sort").addEventListener("change", () => { state.search.page = 1; loadSearch(); });
 document.getElementById("per_page").addEventListener("change", e => {
-  state.per_page = +e.target.value; state.page = 1; refresh();
+  state.search.per_page = +e.target.value; state.search.page = 1; loadSearch();
 });
 ["min_price","max_price","min_area","max_area","min_beds"].forEach(id =>
-  document.getElementById(id).addEventListener("change", () => { state.page = 1; refresh(); })
+  document.getElementById(id).addEventListener("change", () => { state.search.page = 1; loadSearch(); })
 );
-document.getElementById("has_gps").addEventListener("change", () => { state.page = 1; refresh(); });
-document.getElementById("price_drop").addEventListener("change", () => { state.page = 1; refresh(); });
+document.getElementById("has_gps").addEventListener("change", () => { state.search.page = 1; loadSearch(); });
+document.getElementById("price_drop").addEventListener("change", () => { state.search.page = 1; loadSearch(); });
+document.getElementById("price_rise").addEventListener("change", () => { state.search.page = 1; loadSearch(); });
 
-/* --- Map --- */
-const PH_CENTER = [12.88, 121.77];
+document.getElementById("fav-sort").addEventListener("change", () => { state.fav.page = 1; loadFavorites(); });
+document.getElementById("fav-per-page").addEventListener("change", e => {
+  state.fav.per_page = +e.target.value; state.fav.page = 1; loadFavorites();
+});
+
+/* ---------------- Language toggle ---------------- */
+document.getElementById("lang-btn").addEventListener("click", () => {
+  LANG = LANG === "fr" ? "en" : "fr";
+  localStorage.setItem(LANG_KEY, LANG);
+  applyI18n();
+  rerender();
+});
+
+/* ---------------- Country selector ---------------- */
+document.getElementById("country-select").addEventListener("change", e => {
+  const c = e.target.value;
+  document.cookie = "country=" + c + "; path=/; max-age=31536000";
+  localStorage.setItem("ph_scanner_country", c);
+  location.reload();
+});
+
+/* ---------------- Map ---------------- */
+const MAP_CENTER = COUNTRY.map_center;
 
 function initMap() {
   if (map) return;
-  map = L.map("map", { zoomControl: true }).setView(PH_CENTER, 6);
+  map = L.map("map", { zoomControl: true }).setView(MAP_CENTER, 6);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap", maxZoom: 19
   }).addTo(map);
   mapMarkersLayer = L.layerGroup().addTo(map);
+  mapZoomMarkersLayer = L.layerGroup().addTo(map);
   map.on("click", e => setMapPoint(e.latlng.lat, e.latlng.lng));
+  map.on("zoomend moveend", scheduleMainMarkers);
 
-  fetch("/static/ph_regions.geojson")
+  fetch("/static/" + COUNTRY.geojson)
     .then(r => r.json())
     .then(geo => {
-      L.geoJSON(geo, {
-        style: f => ({ color: regionColor(f.properties.region_name), weight: 1, fillColor: regionColor(f.properties.region_name), fillOpacity: 0.12 }),
+      mapRegionLayer = L.geoJSON(geo, {
+        style: f => regionStyle(f, mapMetric),
         onEachFeature: (f, layer) => {
           const p = f.properties;
+          mapProvinceLayers[p.adm2_en] = layer;
           layer.bindTooltip((p.adm2_en || "") + " — " + p.region_name, { sticky: true, direction: "top" });
-          layer.on("mouseover", e => e.target.setStyle({ fillOpacity: 0.35, weight: 2 }));
-          layer.on("mouseout", () => layer.setStyle({ fillOpacity: 0.12, weight: 1 }));
+          layer.on("mouseover", () => layer.setStyle({ fillOpacity: Math.min(0.85, layer.options.fillOpacity + 0.18), weight: 2 }));
+          layer.on("mouseout", () => layer.setStyle(regionStyle(f, mapMetric)));
         }
       }).addTo(map);
+      applyMapMetric(document.getElementById("map-metric").value);
     });
 }
 
@@ -655,6 +1550,138 @@ function regionColor(name) {
   return regionColors[name];
 }
 
+function regionStyle(f, metric) {
+  if (metric === "heat") {
+    return { color: "transparent", weight: 0, fillColor: "transparent", fillOpacity: 0 };
+  }
+  if (!metric || metric === "regions") {
+    const c = regionColor(f.properties.region_name);
+    return { color: c, weight: 1, fillColor: c, fillOpacity: 0.12 };
+  }
+  const v = metricValue(f.properties.adm2_en, metric);
+  return {
+    color: "#2f3c4c", weight: 1,
+    fillColor: metricColor(v), fillOpacity: v == null ? 0.05 : 0.65,
+  };
+}
+
+function metricValue(name, metric) {
+  const m = mapMetricsData && mapMetricsData.metrics ? mapMetricsData.metrics[name] : null;
+  if (!m) return null;
+  if (metric === "psqm") return m.median_psqm;
+  if (metric === "price") return m.median_price;
+  if (metric === "count") return m.count;
+  return null;
+}
+
+function metricColor(v) {
+  if (v == null) return "#1b2531";
+  const range = metricRange || { min: 0, max: 1 };
+  const t = range.max > range.min ? (v - range.min) / (range.max - range.min) : 0;
+  const hue = 130 - t * 130;
+  return "hsl(" + hue + ", 55%, 42%)";
+}
+
+function computeRange(metric) {
+  const metrics = mapMetricsData ? mapMetricsData.metrics : {};
+  let min = Infinity, max = -Infinity;
+  for (const name in metrics) {
+    const v = metricValue(name, metric);
+    if (v != null) { min = Math.min(min, v); max = Math.max(max, v); }
+  }
+  return min === Infinity ? { min: 0, max: 1 } : { min, max };
+}
+
+function ensureMapMetrics() {
+  if (mapMetricsData) return Promise.resolve(mapMetricsData);
+  if (mapMetricsPromise) return mapMetricsPromise;
+  mapMetricsPromise = fetch("/api/map/metrics?" + withFavZones(new URLSearchParams()).toString()).then(r => r.json()).then(d => {
+    mapMetricsData = d;
+    return d;
+  });
+  return mapMetricsPromise;
+}
+
+function applyRegionStyle(layer) {
+  layer.setStyle(regionStyle(layer.feature, mapMetric));
+}
+
+const mapHeatState = { layer: null };
+let heatPointsPromise = null;
+
+function getHeatPoints() {
+  if (heatPointsPromise) return heatPointsPromise;
+  heatPointsPromise = fetch("/api/map/listings?" + withFavZones(new URLSearchParams()).toString()).then(r => r.json()).then(d => {
+    return (d.items || []).map(it => [it.latitude, it.longitude, Math.min((it.price_php || 0) / 1e6, 6)]);
+  });
+  return heatPointsPromise;
+}
+
+function showHeat(mapObj, holder, legendId) {
+  if (holder.layer) return;
+  getHeatPoints().then(pts => {
+    if (!pts.length) return;
+    const layer = L.heatLayer(pts, {
+      radius: 42, blur: 26, maxZoom: 17, minOpacity: 0.35,
+      gradient: { 0.15: "#0d9488", 0.35: "#10b981", 0.55: "#f5c451", 0.75: "#f97316", 1.0: "#ef4444" }
+    }).addTo(mapObj);
+    holder.layer = layer;
+    renderHeatLegend(legendId);
+  });
+}
+
+function clearHeat(mapObj, holder) {
+  if (holder.layer) { mapObj.removeLayer(holder.layer); holder.layer = null; }
+}
+
+function renderHeatLegend(legendId) {
+  const host = document.getElementById(legendId);
+  if (!host) return;
+  host.style.display = "block";
+  host.innerHTML = '<div class="legend-title">' + t("map_metric_heat") + '</div>' +
+    '<div class="legend-bar"></div>' +
+    '<div class="legend-labels"><span>' + SYM + '0</span><span>' + (COUNTRY.id === "ph" ? SYM + "3M" : SYM + "250k") + '</span><span>' + (COUNTRY.id === "ph" ? SYM + "6M+" : SYM + "500k+") + '</span></div>';
+}
+
+function applyMapMetric(metric) {
+  mapMetric = metric || "regions";
+  clearHeat(map, mapHeatState);
+  if (mapMetric === "heat") {
+    Object.values(mapProvinceLayers).forEach(applyRegionStyle);
+    if (mapZoomMarkersLayer) mapZoomMarkersLayer.clearLayers();
+    if (mapMarkersLayer) mapMarkersLayer.clearLayers();
+    document.getElementById("map-markers-count").textContent = "";
+    renderMapLegend(null);
+    showHeat(map, mapHeatState, "map-legend");
+    return;
+  }
+  Object.values(mapProvinceLayers).forEach(applyRegionStyle);
+  if (mapMetric === "regions") {
+    metricRange = null;
+    renderMapLegend(null);
+    return;
+  }
+  ensureMapMetrics().then(() => {
+    metricRange = computeRange(mapMetric);
+    Object.values(mapProvinceLayers).forEach(applyRegionStyle);
+    renderMapLegend(mapMetric);
+  });
+}
+
+function renderMapLegend(metric) {
+  const host = document.getElementById("map-legend");
+  if (!metric) { host.style.display = "none"; host.innerHTML = ""; return; }
+  host.style.display = "block";
+  const fmt = metric === "psqm" ? v => fmtPsqm(v)
+            : metric === "price" ? v => fmtPrice(v)
+            : v => Math.round(v).toLocaleString(LOCALE());
+  const range = metricRange || { min: 0, max: 1 };
+  const mid = (range.min + range.max) / 2;
+  host.innerHTML = '<div class="legend-title">' + t("map_metric_" + metric) + '</div>' +
+    '<div class="legend-bar"></div>' +
+    '<div class="legend-labels"><span>' + fmt(range.min) + '</span><span>' + fmt(mid) + '</span><span>' + fmt(range.max) + '</span></div>';
+}
+
 function setMapPoint(lat, lng) {
   mapState.lat = lat;
   mapState.lng = lng;
@@ -665,8 +1692,8 @@ function setMapPoint(lat, lng) {
     radius: mapState.radius * 1000, color: "#34d399",
     fillColor: "#10b981", fillOpacity: 0.08, weight: 1
   }).addTo(map);
-  state.page = 1;
-  refresh();
+  state.search.page = 1;
+  loadSearch();
 }
 
 function clearMapPoint() {
@@ -677,32 +1704,99 @@ function clearMapPoint() {
   mapMarker = mapCircle = null;
   if (mapMarkersLayer) mapMarkersLayer.clearLayers();
   document.getElementById("map-count").textContent = "";
-  state.page = 1;
-  refresh();
+  state.search.page = 1;
+  loadSearch();
 }
 
 function refreshMapMarkers() {
   if (!map || !mapMarkersLayer) return;
   mapMarkersLayer.clearLayers();
   if (mapState.lat == null) return;
-  const p = activeFilters();
+  const p = buildSearchParams();
   p.set("per_page", 200);
   fetch("/api/listings?" + p.toString())
     .then(r => r.json())
     .then(data => {
       document.getElementById("map-count").textContent =
-        data.total.toLocaleString("fr-FR") + " offres";
+        data.total.toLocaleString(LOCALE()) + " " + t("listings");
       data.items.forEach(it => {
         if (it.latitude == null || it.longitude == null) return;
         const m = L.circleMarker([it.latitude, it.longitude], {
           radius: 6, color: "#0a0e14", weight: 1, fillColor: "#34d399", fillOpacity: 0.9
         });
         m.bindPopup('<div class="map-tip"><b>' + esc(it.title) + "</b>" +
-          fmtPHP(it.price_php) + " · " + esc(it.location_text || "") +
-          '<br><a href="' + esc(it.url) + '" target="_blank">Voir l’annonce ↗</a></div>');
+          fmtPrice(it.price_php) + " · " + esc(it.location_text || "") +
+          '<br><a href="' + esc(it.url) + '" target="_blank">' + t("card_view") + '</a></div>');
         mapMarkersLayer.addLayer(m);
       });
     });
+}
+
+const MAP_MARKER_ZOOM = 9;
+const mapMarkerTimers = {};
+
+function fetchMarkersInBounds(mapObj) {
+  const b = mapObj.getBounds();
+  const p = new URLSearchParams({
+    min_lat: b.getSouth(), max_lat: b.getNorth(),
+    min_lng: b.getWest(), max_lng: b.getEast(),
+  });
+  withFavZones(p);
+  return fetch("/api/map/listings?" + p.toString()).then(r => r.json());
+}
+
+function renderListingMarkers(items, layer) {
+  layer.clearLayers();
+  let min = Infinity, max = -Infinity;
+  items.forEach(it => {
+    const v = it.price_php != null ? it.price_php : it.price_per_sqm;
+    if (v != null) { min = Math.min(min, v); max = Math.max(max, v); }
+  });
+  const hasRange = min !== Infinity && max > min;
+  items.forEach(it => {
+    const v = it.price_php != null ? it.price_php : it.price_per_sqm;
+    let color = "#34d399";
+    if (v != null && hasRange) {
+      color = "hsl(" + (130 - (v - min) / (max - min) * 130) + ", 55%, 45%)";
+    }
+    const m = L.circleMarker([it.latitude, it.longitude], {
+      radius: 7, color: "#0a0e14", weight: 1, fillColor: color, fillOpacity: 0.9
+    });
+    const psqm = it.price_per_sqm != null
+      ? '<br><span style="color:var(--muted)">' + fmtPsqm(it.price_per_sqm) + '</span>'
+      : '';
+    m.bindPopup('<div class="map-tip"><b>' + esc(it.title) + "</b>" +
+      fmtPrice(it.price_php) + " · " + esc(it.location_text || "") + psqm +
+      '<br><a href="' + esc(it.url) + '" target="_blank">' + t("card_view") + '</a></div>');
+    m.bindTooltip(fmtPrice(it.price_php), { direction: "top" });
+    layer.addLayer(m);
+  });
+  return items.length;
+}
+
+function scheduleMarkers(key, mapObj, layer, countEl) {
+  if (!mapObj || !layer) return;
+  if (mapMarkerTimers[key]) clearTimeout(mapMarkerTimers[key]);
+  mapMarkerTimers[key] = setTimeout(() => {
+    if (mapObj.getZoom() < MAP_MARKER_ZOOM) {
+      layer.clearLayers();
+      if (countEl) countEl.textContent = "";
+      return;
+    }
+    fetchMarkersInBounds(mapObj).then(d => {
+      const n = renderListingMarkers(d.items || [], layer);
+      if (countEl) countEl.textContent = n ? n.toLocaleString(LOCALE()) + " " + t("listings") : "";
+    }).catch(() => {});
+  }, 250);
+}
+
+function scheduleMainMarkers() {
+  if (mapState.lat != null) return;
+  if (mapMetric === "heat") {
+    if (mapZoomMarkersLayer) mapZoomMarkersLayer.clearLayers();
+    return;
+  }
+  scheduleMarkers("main", map, mapZoomMarkersLayer, document.getElementById("map-markers-count"));
 }
 
 document.getElementById("filters").addEventListener("toggle", () => {
@@ -715,12 +1809,229 @@ document.getElementById("radius").addEventListener("input", e => {
   mapState.radius = +e.target.value;
   document.getElementById("radius-label").textContent = mapState.radius + " km";
   if (mapCircle) mapCircle.setRadius(mapState.radius * 1000);
-  if (mapState.lat != null) { state.page = 1; refresh(); }
+  if (mapState.lat != null) { state.search.page = 1; loadSearch(); }
 });
 
 document.getElementById("map-clear").addEventListener("click", clearMapPoint);
 
-/* --- Manual add (Facebook / rush sale) --- */
+document.getElementById("map-metric").addEventListener("change", e => {
+  if (mapRegionLayer) applyMapMetric(e.target.value);
+});
+
+/* ---------------- Analyse tab ---------------- */
+function loadAnalyse() {
+  initAnalysisMap();
+  setTimeout(() => { if (analysisMap) analysisMap.map.invalidateSize(); }, 60);
+  loadEvolution();
+}
+
+/* ---------------- Tendances tab ---------------- */
+function loadTrends() {
+  fetch("/api/trends?" + withFavZones(new URLSearchParams()).toString()).then(r => r.json()).then(d => {
+    document.getElementById("trends-summary").textContent =
+      d.rises.length + " " + t("trends_rises").toLowerCase() + " · " +
+      d.drops.length + " " + t("trends_drops").toLowerCase();
+
+    const withDate = it => Object.assign({}, it, {
+      agent: fmtDate(it.changed_at),
+      published: it.first_seen ? fmtDate(it.first_seen) : null,
+    });
+    const empty = '<div class="empty">' + t("trends_empty") + '</div>';
+
+    const rises = document.getElementById("trends-rises");
+    const drops = document.getElementById("trends-drops");
+    rises.innerHTML = d.rises.length ? d.rises.map(withDate).map(cardHTML).join("") : empty;
+    drops.innerHTML = d.drops.length ? d.drops.map(withDate).map(cardHTML).join("") : empty;
+  }).catch(() => {});
+}
+
+function loadEvolution() {
+  fetch("/api/analytics/evolution?" + withFavZones(new URLSearchParams()).toString())
+    .then(r => r.json())
+    .then(d => {
+      evolutionData = d;
+      populateProvinceSelect(d);
+      renderEvolutionChart();
+    })
+    .catch(() => {});
+}
+
+function populateProvinceSelect(d) {
+  const sel = document.getElementById("analyse-province");
+  const prev = sel.value;
+  sel.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "overall";
+  all.textContent = t("analyse_all");
+  sel.appendChild(all);
+  Object.keys(d.provinces || {}).forEach(p => {
+    const o = document.createElement("option");
+    o.value = p;
+    o.textContent = p;
+    sel.appendChild(o);
+  });
+  if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+}
+
+function renderEvolutionChart() {
+  if (!evolutionData) return;
+  const sel = document.getElementById("analyse-province").value;
+  const series = sel === "overall"
+    ? evolutionData.overall
+    : (evolutionData.provinces[sel] || { median_price: [] });
+  const canvas = document.getElementById("analyse-evolution-chart");
+  if (evolutionChart) { evolutionChart.destroy(); evolutionChart = null; }
+  const labels = evolutionData.dates.map(d =>
+    new Date(d + "T00:00:00").toLocaleDateString(LOCALE()));
+  evolutionChart = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: t("analyse_median_price"),
+        data: series.median_price,
+        borderColor: "#10b981",
+        backgroundColor: "rgba(16,185,129,.15)",
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3,
+        pointBackgroundColor: "#10b981",
+        spanGaps: true,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          ticks: { callback: v => fmtAxis(v), color: "#8a99a8" },
+          grid: { color: "#1b2531" },
+        },
+        x: { ticks: { color: "#8a99a8" }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+document.getElementById("analyse-province").addEventListener("change", renderEvolutionChart);
+
+function initAnalysisMap() {
+  if (analysisMap) return;
+  const s = {
+    map: L.map("analyse-map").setView(MAP_CENTER, 6),
+    regionLayer: null,
+    provinceLayers: {},
+    markersLayer: null,
+    heat: { layer: null },
+    metric: "regions",
+    range: null,
+  };
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap", maxZoom: 19
+  }).addTo(s.map);
+  s.markersLayer = L.layerGroup().addTo(s.map);
+  s.map.on("zoomend moveend", () => {
+    if (s.metric === "heat") { s.markersLayer.clearLayers(); return; }
+    scheduleMarkers("analyse", s.map, s.markersLayer, document.getElementById("analyse-markers-count"));
+  });
+
+  function metricValue(name, metric) {
+    const m = mapMetricsData && mapMetricsData.metrics ? mapMetricsData.metrics[name] : null;
+    if (!m) return null;
+    if (metric === "psqm") return m.median_psqm;
+    if (metric === "price") return m.median_price;
+    if (metric === "count") return m.count;
+    return null;
+  }
+  function metricColor(v) {
+    if (v == null) return "#1b2531";
+    const range = s.range || { min: 0, max: 1 };
+    const t = range.max > range.min ? (v - range.min) / (range.max - range.min) : 0;
+    const hue = 130 - t * 130;
+    return "hsl(" + hue + ", 55%, 42%)";
+  }
+  function regionStyle(f) {
+    if (s.metric === "heat") {
+      return { color: "transparent", weight: 0, fillColor: "transparent", fillOpacity: 0 };
+    }
+    if (!s.metric || s.metric === "regions") {
+      const c = regionColor(f.properties.region_name);
+      return { color: c, weight: 1, fillColor: c, fillOpacity: 0.12 };
+    }
+    const v = metricValue(f.properties.adm2_en, s.metric);
+    return {
+      color: "#2f3c4c", weight: 1,
+      fillColor: metricColor(v), fillOpacity: v == null ? 0.05 : 0.65,
+    };
+  }
+  function computeRange(metric) {
+    const metrics = mapMetricsData ? mapMetricsData.metrics : {};
+    let min = Infinity, max = -Infinity;
+    for (const name in metrics) {
+      const v = metricValue(name, metric);
+      if (v != null) { min = Math.min(min, v); max = Math.max(max, v); }
+    }
+    return min === Infinity ? { min: 0, max: 1 } : { min, max };
+  }
+  function renderLegend(metric) {
+    const host = document.getElementById("analyse-map-legend");
+    if (!metric) { host.style.display = "none"; host.innerHTML = ""; return; }
+    host.style.display = "block";
+    const fmt = metric === "psqm" ? v => fmtPsqm(v)
+              : metric === "price" ? v => fmtPrice(v)
+              : v => Math.round(v).toLocaleString(LOCALE());
+    const range = s.range || { min: 0, max: 1 };
+    const mid = (range.min + range.max) / 2;
+    host.innerHTML = '<div class="legend-title">' + t("map_metric_" + metric) + '</div>' +
+      '<div class="legend-bar"></div>' +
+      '<div class="legend-labels"><span>' + fmt(range.min) + '</span><span>' + fmt(mid) + '</span><span>' + fmt(range.max) + '</span></div>';
+  }
+  function applyMetric(metric) {
+    s.metric = metric || "regions";
+    clearHeat(s.map, s.heat);
+    if (s.metric === "heat") {
+      Object.values(s.provinceLayers).forEach(l => l.setStyle(regionStyle(l.feature)));
+      s.markersLayer.clearLayers();
+      document.getElementById("analyse-markers-count").textContent = "";
+      renderLegend(null);
+      showHeat(s.map, s.heat, "analyse-map-legend");
+      return;
+    }
+    Object.values(s.provinceLayers).forEach(l => l.setStyle(regionStyle(l.feature)));
+    if (s.metric === "regions") {
+      s.range = null;
+      renderLegend(null);
+      return;
+    }
+    ensureMapMetrics().then(() => {
+      s.range = computeRange(s.metric);
+      Object.values(s.provinceLayers).forEach(l => l.setStyle(regionStyle(l.feature)));
+      renderLegend(s.metric);
+    });
+  }
+
+  fetch("/static/" + COUNTRY.geojson)
+    .then(r => r.json())
+    .then(geo => {
+      s.regionLayer = L.geoJSON(geo, {
+        style: f => regionStyle(f),
+        onEachFeature: (f, layer) => {
+          s.provinceLayers[f.properties.adm2_en] = layer;
+          layer.bindTooltip((f.properties.adm2_en || "") + " — " + f.properties.region_name, { sticky: true, direction: "top" });
+          layer.on("mouseover", () => layer.setStyle({ fillOpacity: Math.min(0.85, layer.options.fillOpacity + 0.18), weight: 2 }));
+          layer.on("mouseout", () => layer.setStyle(regionStyle(f)));
+        }
+      }).addTo(s.map);
+      applyMetric(document.getElementById("analyse-map-metric").value);
+    });
+
+  document.getElementById("analyse-map-metric").addEventListener("change", e => {
+    if (s.regionLayer) applyMetric(e.target.value);
+  });
+
+  analysisMap = s;
+}
+
+/* ---------------- Manual add ---------------- */
 const M_FIELDS = ["m-title","m-price","m-location","m-beds","m-baths","m-area","m-url","m-desc","m-agent"];
 
 function openModal() { document.getElementById("add-modal").style.display = "flex"; document.getElementById("m-title").focus(); }
@@ -754,13 +2065,15 @@ document.getElementById("m-submit").addEventListener("click", () => {
     if (data.error) { alert(data.error); return; }
     closeModal();
     clearForm();
-    state.page = 1; refresh();
+    state.search.page = 1; loadSearch();
     loadFacets();
-  }).catch(e => alert("Erreur : " + e.message));
+  }).catch(e => alert(t("error_prefix") + " " + e.message));
 });
 
+/* ---------------- Init ---------------- */
+applyI18n();
 loadFacets();
-refresh();
+switchTab("home");
 </script>
 </body>
 </html>

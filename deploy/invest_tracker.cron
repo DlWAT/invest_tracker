@@ -1,0 +1,3 @@
+# Daily database update at 4am (Europe/Paris, DST-aware).
+CRON_TZ=Europe/Paris
+0 4 * * * root cd /opt/invest_tracker && /opt/invest_tracker/.venv/bin/python collect_scheduled.py > /dev/null 2>&1

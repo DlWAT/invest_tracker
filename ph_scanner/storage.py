@@ -44,6 +44,13 @@ CREATE TABLE IF NOT EXISTS price_history (
     seen_at      TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS favorites (
+    source       TEXT NOT NULL,
+    external_id  TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    PRIMARY KEY (source, external_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_listings_zone ON listings(zone_id);
 CREATE INDEX IF NOT EXISTS idx_listings_price ON listings(price_php);
 """

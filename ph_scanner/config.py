@@ -34,6 +34,19 @@ ZONES = [
     },
 ]
 
+# Favorite micro-locations the user can toggle as a global filter, across every
+# tab. Each maps to one or more ``province`` slugs (optionally narrowed by
+# keyword matches against the title/location, e.g. Tagaytay within Cavite).
+FAVORITE_ZONES = [
+    {"id": "palawan", "label": "Palawan", "provinces": ["palawan"]},
+    {"id": "marinduque", "label": "Marinduque", "provinces": ["marinduque"]},
+    {"id": "tagaytay", "label": "Tagaytay", "provinces": ["cavite"], "keywords": ["tagaytay"]},
+    {"id": "batangas", "label": "Batangas", "provinces": ["batangas"]},
+    {"id": "mindoro", "label": "Mindoro", "provinces": ["oriental-mindoro", "occidental-mindoro"]},
+    {"id": "cavite", "label": "Cavite", "provinces": ["cavite"]},
+    {"id": "romblon", "label": "Romblon", "provinces": ["romblon"]},
+]
+
 # All Philippine provinces grouped by administrative region. DotProperty slugs.
 # Edge cases: DotProperty still uses "compostela-valley" (not the renamed
 # "davao-de-oro") and "cotabato" (for North Cotabato).
